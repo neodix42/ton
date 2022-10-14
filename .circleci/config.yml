@@ -1,0 +1,32 @@
+version: 2.1
+jobs:
+  "Classic":
+    docker:
+      - image: "cimg/base:2022.03"
+    steps:
+      - checkout
+      - run:
+          name: Install deps
+          command: 'sudo apt-get install -y build-essential git make cmake clang libgflags-dev zlib1g-dev libssl-dev libreadline-dev libmicrohttpd-dev pkg-config libgsl-dev python3 python3-dev python3-pip'
+      - run:
+          name: Check versions
+          command: |
+            cmake --version
+      - run:
+          name: Build
+          command: |
+            export CC=$(which clang)
+            export CXX=$(which clang++)
+            export CCACHE_DISABLE=1
+            mkdir build
+            cd build
+            cmake -DCMAKE_BUILD_TYPE=Release ..
+            make -j 4 fift
+      - run:
+          name: Build
+          command: |
+            uname -a
+workflows:
+  build:
+    jobs:
+      - "Classic"
