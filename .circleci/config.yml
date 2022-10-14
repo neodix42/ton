@@ -7,7 +7,7 @@ jobs:
       - checkout
       - run:
           name: Installing SUDO
-          command: 'sudo apt-get update && sudo apt-get install -y && sudo rm -rf /var/lib/apt/lists/*'
+          command: 'sudo killall -9 apt-get || true && sudo apt-get update'
       - run:
           name: Install deps
           command: |
