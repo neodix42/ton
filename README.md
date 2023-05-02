@@ -70,3 +70,18 @@ If a CI workflow fails not because of your changes but workflow issues, try to f
 ```sh
 choco install ton
 ```
+
+### Brew
+
+```sh
+brew tap ton-blockchain/ton
+brew install ton
+```
+
+### deb (apt)
+
+```sh
+sudo echo 'deb [trusted=yes] https://github.com/ton-blockchain/ton/releases/latest/download ./' > /etc/apt/sources.list.d/10-ton.list
+sudo apt update
+sudo apt install ton
+```
