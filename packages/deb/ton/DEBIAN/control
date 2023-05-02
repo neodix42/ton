@@ -1,0 +1,6 @@
+Package: ton
+Version: 0-dev
+Architecture: ARCH
+Maintainer: neodiX
+Priority: optional
+Description: The Open Network
