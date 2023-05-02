@@ -16,4 +16,5 @@ $packageArgs = @{
   checksumType64= 'sha256'
 }
 
+Install-ChocolateyPath -PathToInstall "$(Split-Path -parent $MyInvocation.MyCommand.Definition)"
 Install-ChocolateyZipPackage @packageArgs # https://docs.chocolatey.org/en-us/create/functions/install-chocolateyzippackage

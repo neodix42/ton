@@ -22,6 +22,6 @@ This package includes all TON binary artifacts.
     <releaseNotes>https://raw.githubusercontent.com/ton-blockchain/ton/master/Changelog.md</releaseNotes>
   </metadata>
   <files>
-    <file src="tools\**" target="tools" />
+    <file src="tools\**" target="bin" />
   </files>
 </package>
