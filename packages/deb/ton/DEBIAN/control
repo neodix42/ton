@@ -1,5 +1,5 @@
 Package: ton
-Version: 0-dev
+Version: VERSION
 Architecture: ARCH
 Maintainer: neodiX
 Priority: optional
