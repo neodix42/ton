@@ -34,6 +34,7 @@ jobs:
           git fetch --all --tags
           TAG=$(git describe --tags --always)
           
+          mkdir packages-out
           cd packages-out
           ./packages/deb.sh packages-out $PWD/packages/deb/ton $PWD/ton-linux-deb-amd64 amd64 ${TAG:1}
           ./packages/deb.sh packages-out $PWD/packages/deb/ton $PWD/ton-linux-deb-arm64 arm64 ${TAG:1}
