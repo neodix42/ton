@@ -1,6 +1,6 @@
 Package: ton
 Version: VERSION
 Architecture: ARCH
-Maintainer: neodiX
+Maintainer: TON Foundation
 Priority: optional
-Description: The Open Network
+Description: TON (The Open Network) binary artifacts
