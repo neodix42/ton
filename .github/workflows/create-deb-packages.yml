@@ -31,6 +31,7 @@ jobs:
           mv ton-linux-deb-amd64/bin/libtonlibjson.so.0.5 ton-linux-deb-amd64/lib/
           
           # get latest tag
+          git fetch --all --tags
           TAG=$(git describe --tags)
           
           cd packages-out
