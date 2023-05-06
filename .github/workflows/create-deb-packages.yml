@@ -11,7 +11,7 @@ jobs:
     steps:
       - uses: actions/checkout@v3
 
-      - name: Get latest linux arm64 and amd64 artifacts
+      - name: Create deb packages
         run: |
           REPO_DIR=$PWD
           git fetch --all --tags
@@ -44,6 +44,6 @@ jobs:
           apt-ftparchive release . > Release
 
           cd $REPO_DIR
-          gh release upload --clobber ${TAG:1} ../work/packages-out/deb-install/Packages ../work/packages-out/deb-install/Release ../work/packages-out/deb-install/ton_amd64.deb ../work/packages-out/deb-install/ton_arm64.deb
+          gh release upload --clobber $TAG ../work/packages-out/deb-install/Packages ../work/packages-out/deb-install/Release ../work/packages-out/deb-install/ton_amd64.deb ../work/packages-out/deb-install/ton_arm64.deb
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
