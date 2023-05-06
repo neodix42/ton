@@ -35,6 +35,7 @@ jobs:
           TAG=$(git describe --tags --always)
           
           mkdir packages-out
+          chmod +x ./packages/deb.sh
           ./packages/deb.sh packages-out $PWD/packages/deb/ton $PWD/ton-linux-deb-amd64 amd64 ${TAG:1}
           ./packages/deb.sh packages-out $PWD/packages/deb/ton $PWD/ton-linux-deb-arm64 arm64 ${TAG:1}
           cd packages-out/deb-install
