@@ -27,12 +27,14 @@ jobs:
           rm -rf ton-linux-amd64/lib ton-linux-amd64/smartcont
 
           mkdir -p ton-linux-deb-arm64/bin ton-linux-deb-arm64/lib
-          cp ton-linux-arm64/* ton-linux-deb-arm64/bin/
+          cp ton-linux-arm64/* ton-linux-deb-arm64/bin/          
           mv ton-linux-deb-arm64/bin/libtonlibjson.so.0.5 ton-linux-deb-arm64/lib/
+          chmod 555 ton-linux-deb-arm64/bin/* ton-linux-deb-arm64/lib/*
 
           mkdir -p ton-linux-deb-amd64/bin ton-linux-deb-amd64/lib
           cp ton-linux-amd64/* ton-linux-deb-amd64/bin/
           mv ton-linux-deb-amd64/bin/libtonlibjson.so.0.5 ton-linux-deb-amd64/lib/
+          chmod 555 ton-linux-deb-amd64/bin/* ton-linux-deb-amd64/lib/*
 
           mkdir packages-out
           chmod +x $REPO_DIR/packages/deb.sh
