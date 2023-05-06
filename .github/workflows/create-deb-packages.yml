@@ -15,7 +15,7 @@ jobs:
         run: |
           REPO_DIR=$PWD
           git fetch --all --tags
-          TAG=$(git describe --tags --first-parent --abbrev=0)
+          TAG=$(gh release list |  awk '{print $(NF-1)}')
           echo "latest TAG = $TAG"
 
           mkdir ../work; cd ../work
