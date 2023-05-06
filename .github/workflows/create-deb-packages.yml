@@ -13,6 +13,12 @@ jobs:
 
       - name: Get latest linux arm64 and amd64 artifacts
         run: |
+          REPO_DIR=$PWD
+          git fetch --all --tags
+          TAG=$(git describe --tags --always)
+          echo "latest TAG = $TAG"
+
+          mkdir ../work; cd ../work
           curl -L https://github.com/ton-blockchain/ton/releases/latest/download/ton-linux-arm64.zip -o ton-linux-arm64.zip
           curl -L https://github.com/ton-blockchain/ton/releases/latest/download/ton-linux-x86_64.zip -o ton-linux-amd64.zip
           unzip ton-linux-arm64.zip -d ton-linux-arm64
@@ -20,29 +26,24 @@ jobs:
           rm -rf ton-linux-arm64/lib ton-linux-arm64/smartcont
           rm -rf ton-linux-amd64/lib ton-linux-amd64/smartcont
 
-      - name: Build deb packages
-        run: |
           mkdir -p ton-linux-deb-arm64/bin ton-linux-deb-arm64/lib
           cp ton-linux-arm64/* ton-linux-deb-arm64/bin/
           mv ton-linux-deb-arm64/bin/libtonlibjson.so.0.5 ton-linux-deb-arm64/lib/
-          
+
           mkdir -p ton-linux-deb-amd64/bin ton-linux-deb-amd64/lib
           cp ton-linux-amd64/* ton-linux-deb-amd64/bin/
           mv ton-linux-deb-amd64/bin/libtonlibjson.so.0.5 ton-linux-deb-amd64/lib/
-          
-          # get latest tag
-          git fetch --all --tags
-          TAG=$(git describe --tags --always)
-          
+
           mkdir packages-out
-          chmod +x ./packages/deb.sh
-          ./packages/deb.sh packages-out $PWD/packages/deb/ton $PWD/ton-linux-deb-amd64 amd64 ${TAG:1}
-          ./packages/deb.sh packages-out $PWD/packages/deb/ton $PWD/ton-linux-deb-arm64 arm64 ${TAG:1}
+          chmod +x $REPO_DIR/packages/deb.sh
+          $REPO_DIR/packages/deb.sh packages-out $REPO_DIR/packages/deb/ton $PWD/ton-linux-deb-amd64 amd64 ${TAG:1}
+          $REPO_DIR/packages/deb.sh packages-out $REPO_DIR/packages/deb/ton $PWD/ton-linux-deb-arm64 arm64 ${TAG:1}
           cd packages-out/deb-install
           dpkg-scanpackages -a amd64 . > Packages
           dpkg-scanpackages -a arm64 . >> Packages
           apt-ftparchive release . > Release
-          
-          gh release upload --clobber ${TAG:1} Packages Release ton_amd64.deb ton_arm64.deb 
+
+          cd $REPO_DIR
+          gh release upload --clobber ${TAG:1} ../work/packages-out/deb-install/Packages ../work/packages-out/deb-install/Release ../work/packages-out/deb-install/ton_amd64.deb ../work/packages-out/deb-install/ton_arm64.deb
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
