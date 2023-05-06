@@ -44,3 +44,5 @@ jobs:
           apt-ftparchive release . > Release
           
           gh release upload --clobber ${TAG:1} Packages Release ton_amd64.deb ton_arm64.deb 
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
