@@ -7,6 +7,9 @@ permissions: write-all
 jobs:
   create-release:
     runs-on: ubuntu-22.04
+    env:
+      USER: runner
+      SSH_AUTH_SOCK: /tmp/ssh_agent.sock
 
     steps:
       - uses: actions/checkout@v3
