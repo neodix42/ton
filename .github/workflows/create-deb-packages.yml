@@ -61,6 +61,7 @@ jobs:
 
       - name: Upload deb packages to release
         run: |
+          git fetch --all --tags
           gh release upload --clobber $TAG ../work/packages-out/deb-install/Packages ../work/packages-out/deb-install/Release ../work/packages-out/deb-install/ton_amd64.deb ../work/packages-out/deb-install/ton_arm64.deb
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
