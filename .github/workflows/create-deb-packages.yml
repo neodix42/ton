@@ -55,6 +55,8 @@ jobs:
           $REPO_DIR/packages/rpm.sh packages-out $REPO_DIR/packages/rpm/SPECS/ton.spec $PWD/ton-linux-rpm-aarch64 aarch64 ${TAG:1}
           cd packages-out/rpm-install
           createrepo_c .
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Upload deb packages to release
         run: |
