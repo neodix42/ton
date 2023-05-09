@@ -1,4 +1,4 @@
-name: Create deb packages
+name: Create packages
 
 on: [workflow_dispatch]
 
@@ -11,7 +11,7 @@ jobs:
     steps:
       - uses: actions/checkout@v3
 
-      - name: Create deb packages
+      - name: Create packages
         run: |
           REPO_DIR=$PWD
           git fetch --all --tags
@@ -49,6 +49,7 @@ jobs:
           apt-ftparchive release . > Release
 
           # rpm
+          sudo apt install -y createrepo-c
           cd ../..
           chmod +x $REPO_DIR/packages/rpm.sh
           $REPO_DIR/packages/rpm.sh packages-out $REPO_DIR/packages/rpm/SPECS/ton.spec $PWD/ton-linux-rpm-amd64 amd64 ${TAG:1}
