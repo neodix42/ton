@@ -30,13 +30,16 @@ jobs:
           cp ton-linux-arm64/* ton-linux-deb-arm64/bin/
           mv ton-linux-deb-arm64/bin/libtonlibjson.so.0.5 ton-linux-deb-arm64/lib/
           chmod 555 ton-linux-deb-arm64/bin/* ton-linux-deb-arm64/lib/*
-          
+
           mkdir -p ton-linux-deb-amd64/bin ton-linux-deb-amd64/lib
           cp ton-linux-amd64/* ton-linux-deb-amd64/bin/
           mv ton-linux-deb-amd64/bin/libtonlibjson.so.0.5 ton-linux-deb-amd64/lib/
           chmod 555 ton-linux-deb-amd64/bin/* ton-linux-deb-amd64/lib/*
-  
+          cp -R ton-linux-deb-amd64 ton-linux-rpm-amd64
+          cp -R ton-linux-deb-arm64 ton-linux-rpm-aarch64
+
           mkdir packages-out
+          # deb
           chmod +x $REPO_DIR/packages/deb.sh
           $REPO_DIR/packages/deb.sh packages-out $REPO_DIR/packages/deb/ton $PWD/ton-linux-deb-amd64 amd64 ${TAG:1}
           $REPO_DIR/packages/deb.sh packages-out $REPO_DIR/packages/deb/ton $PWD/ton-linux-deb-arm64 arm64 ${TAG:1}
@@ -45,7 +48,28 @@ jobs:
           dpkg-scanpackages -a arm64 . >> Packages
           apt-ftparchive release . > Release
 
-          cd $REPO_DIR
+          # rpm
+          cd ../..
+          chmod +x $REPO_DIR/packages/rpm.sh
+          $REPO_DIR/packages/rpm.sh packages-out $REPO_DIR/packages/rpm/SPECS/ton.spec $PWD/ton-linux-rpm-amd64 amd64 ${TAG:1}
+          $REPO_DIR/packages/rpm.sh packages-out $REPO_DIR/packages/rpm/SPECS/ton.spec $PWD/ton-linux-rpm-aarch64 aarch64 ${TAG:1}
+          cd packages-out/rpm-install
+          createrepo_c .
+
+      - name: Upload deb packages to release
+        run: |
           gh release upload --clobber $TAG ../work/packages-out/deb-install/Packages ../work/packages-out/deb-install/Release ../work/packages-out/deb-install/ton_amd64.deb ../work/packages-out/deb-install/ton_arm64.deb
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload rpm packages to ton-blockchain/rpm-repo
+        run: |
+          git clone git@github.com:neodix42/rpm-repo.git
+          cd rpm-repo
+          git rm -rf *
+          cp -r ../work/packages-out/rpm-install rpm
+          git add .
+          git commit --amend -m "Push rpm artifacts $(date -I)"
+          git push -f
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
