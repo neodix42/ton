@@ -1,0 +1,31 @@
+name: Create choco release
+
+on: [workflow_dispatch]
+
+defaults:
+  run:
+    shell: cmd
+
+jobs:
+  build:
+    runs-on: windows-2019
+
+    steps:
+      - name: Check out current repository
+        uses: actions/checkout@v3
+
+      - name: Build and push the package
+        run: |
+          curl -h
+          checksum -h
+          choco install checksum curl
+          curl -L https://github.com/ton-blockchain/ton/releases/latest/download/ton-win-x86-64.zip -o ton-win-x86-64.zip
+          checksum -t sha256 -f ton-win-x86-64.zip
+          
+          TAG=$(git ls-remote --tags https://github.com/ton-blockchain/ton/  | tail -1 | sed -n -e 's/^.*tags\///p')
+          echo "latest TAG = $TAG"          
+          
+#          cd packages\chocolatey
+#          choco pack
+#          choco apikey --api-key "${{ secrets.AUR_REPO_KEY }}" -source https://push.chocolatey.org/
+#          choco push --source https://push.chocolatey.org/
