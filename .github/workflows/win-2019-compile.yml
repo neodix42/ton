@@ -50,7 +50,6 @@ jobs:
           unzip libmicrohttpd-latest-w32-bin.zip
 
       - uses: seanmiddleditch/gha-setup-ninja@master
-        name: Compile with ninja
         run: |
           set root=%cd%
           echo %root%
