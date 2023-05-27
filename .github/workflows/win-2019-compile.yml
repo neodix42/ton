@@ -49,6 +49,7 @@ jobs:
           curl  -Lo libmicrohttpd-latest-w32-bin.zip https://ftpmirror.gnu.org/libmicrohttpd/libmicrohttpd-latest-w32-bin.zip
           unzip libmicrohttpd-latest-w32-bin.zip
 
+      - uses: microsoft/setup-msbuild@v1.1
       - uses: seanmiddleditch/gha-setup-ninja@master
       - run: |
           set root=%cd%
