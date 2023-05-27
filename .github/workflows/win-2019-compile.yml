@@ -22,34 +22,24 @@ jobs:
         with:
           submodules: 'recursive'
 
-      - name: Check out zlib repository
-        uses: actions/checkout@v3
-        with:
-          repository: desktop-app/zlib
-          path: zlib
-
-      - name: Setup msbuild.exe
-        uses: microsoft/setup-msbuild@v1.1
-
       - name: Install Pkg-config Lite
         run: choco install pkgconfiglite
 
       - name: Compile zlib Win64
         run: |
-          cd zlib\contrib\vstudio\vc14
-          msbuild zlibstat.vcxproj /p:Configuration=ReleaseWithoutAsm /p:platform=x64 -p:PlatformToolset=v142
+          curl -Lo zlib.zip https://github.com/neodiX42/precompiled-openssl-win64/raw/main/zlib.zip
+          jar xf zlib.zip
 
       - name: Install pre-compiled OpenSSL Win64
         run: |
-          curl  -Lo openssl-1.1.1j.zip https://github.com/neodiX42/precompiled-openssl-win64/raw/main/openssl-1.1.1j.zip
+          curl -Lo openssl-1.1.1j.zip https://github.com/neodiX42/precompiled-openssl-win64/raw/main/openssl-1.1.1j.zip
           jar xf openssl-1.1.1j.zip
 
       - name: Install pre-compiled libmicrohttpd Win64
         run: |
-          curl  -Lo libmicrohttpd-latest-w32-bin.zip https://ftpmirror.gnu.org/libmicrohttpd/libmicrohttpd-latest-w32-bin.zip
-          unzip libmicrohttpd-latest-w32-bin.zip
+          curl -Lo libmicrohttpd-latest-w32-bin.zip https://ftpmirror.gnu.org/libmicrohttpd/libmicrohttpd-latest-w32-bin.zip
+          unzip -qq libmicrohttpd-latest-w32-bin.zip
 
-      - uses: microsoft/setup-msbuild@v1.1
       - uses: seanmiddleditch/gha-setup-ninja@master
       - run: |
           set root=%cd%
