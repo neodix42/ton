@@ -37,17 +37,17 @@ Main TON monorepo, which includes the code of the node/validator, lite-client, t
 ## The Open Network
 
 __The Open Network (TON)__ is a fast, secure, scalable blockchain focused on handling _millions of transactions per second_ (TPS) with the goal of reaching hundreds of millions of blockchain users.
-- To learn more about different aspects of TON blockchain and its underlying ecosystem check [documentation](https://docs.ton.org/)
-- To run node, validator or lite-server check [Participate section](https://docs.ton.org/participate/nodes/node-types)
-- To develop decentralised apps check [Tutorials](https://docs.ton.org/develop/smart-contracts/), [FunC docs](https://docs.ton.org/develop/func/overview) and [DApp tutorials](https://docs.ton.org/develop/getting-started#web-and-dapps-development)
+- To learn more about different aspects of TON blockchain and its underlying ecosystem check [documentation](https://ton.org/docs)
+- To run node, validator or lite-server check [Participate section](https://ton.org/docs/participate/nodes/run-node)
+- To develop decentralised apps check [Tutorials](https://ton.org/docs/develop/smart-contracts/), [FunC docs](https://ton.org/docs/develop/func/overview) and [DApp tutorials](https://ton.org/docs/develop/dapps/)
 - To work on TON check [wallets](https://ton.app/wallets), [explorers](https://ton.app/explorers), [DEXes](https://ton.app/dex) and [utilities](https://ton.app/utilities)
-- To interact with TON check [APIs](https://docs.ton.org/develop/dapps/apis)
+- To interact with TON check [APIs](https://ton.org/docs/develop/dapps/apis/)
 
 ## Updates flow:
 
 * **master branch** - mainnet is running on this stable branch.
 
-  Only emergency updates, urgent updates, or updates that do not affect the main codebase (GitHub workflows / docker images / documentation) are committed directly to this branch.
+    Only emergency updates, urgent updates, or updates that do not affect the main codebase (GitHub workflows / docker images / documentation) are committed directly to this branch.
 
 * **testnet branch** - testnet is running on this branch. The branch contains a set of new updates. After testing, the testnet branch is merged into the master branch and then a new set of updates is added to testnet branch.
 
@@ -62,26 +62,7 @@ Usually, the response to your pull request will indicate which section it falls 
 * Thou shall make sure that workflows are cleanly completed for your PR before considering merge
 
 ## Workflows responsibility
-If a CI workflow fails not because of your changes but workflow issues, try to fix it yourself or contact @neodix from TON Foundation.
+If a CI workflow fails not because of your changes but workflow issues, try to fix it yourself or contact one of the persons listed below via Telegram messenger:
 
-## Installation of TON artifacts
-### Chocolatey
-
-```sh
-choco install ton
-```
-
-### Brew
-
-```sh
-brew tap ton-blockchain/ton
-brew install ton
-```
-
-### deb (apt)
-
-```sh
-sudo echo 'deb [trusted=yes] https://github.com/ton-blockchain/ton/releases/latest/download ./' > /etc/apt/sources.list.d/10-ton.list
-sudo apt update
-sudo apt install ton
-```
+* **C/C++ CI (ccpp-linux.yml)**: TBD
+* **C/C++ CI Win64 Compile (ccpp-win64.yml)**: TBD
