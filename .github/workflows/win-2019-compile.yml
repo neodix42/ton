@@ -49,6 +49,9 @@ jobs:
           curl  -Lo libmicrohttpd-latest-w32-bin.zip https://ftpmirror.gnu.org/libmicrohttpd/libmicrohttpd-latest-w32-bin.zip
           unzip libmicrohttpd-latest-w32-bin.zip
 
+      - name: Install clang and cmake
+        run: choco install clang cmake
+
       - uses: seanmiddleditch/gha-setup-ninja@master
       - run: |
           set root=%cd%
