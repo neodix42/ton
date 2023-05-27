@@ -50,7 +50,7 @@ jobs:
           unzip libmicrohttpd-latest-w32-bin.zip
 
       - name: Install clang and cmake
-        run: choco install clang cmake
+        run: choco install clang llvm
 
       - uses: seanmiddleditch/gha-setup-ninja@master
       - run: |
