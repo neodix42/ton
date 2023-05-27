@@ -12,12 +12,15 @@ jobs:
     runs-on: windows-2019
 
     steps:
+      - uses: seanmiddleditch/gha-setup-ninja@master
+
       - name: Get Current OS version
         run: |
           systeminfo | findstr /B /C:"OS Name" /C:"OS Version"
 
       - name: Check out current repository
         uses: actions/checkout@v3
+
         with:
           submodules: 'recursive'
 
@@ -48,8 +51,8 @@ jobs:
           curl  -Lo libmicrohttpd-latest-w32-bin.zip https://ftpmirror.gnu.org/libmicrohttpd/libmicrohttpd-latest-w32-bin.zip
           unzip libmicrohttpd-latest-w32-bin.zip
 
+
       - name: Compile with ninja
-        uses: seanmiddleditch/gha-setup-ninja@master
         run: |
           set root=%cd%
           echo %root%
