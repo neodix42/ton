@@ -15,7 +15,8 @@ jobs:
       - name: Get Current OS version
         run: |
           systeminfo | findstr /B /C:"OS Name" /C:"OS Version"  
-          ls "C:\Program Files (x86)\Microsoft Visual Studio\2019\Enterprise\VC\Tools\MSVC"
+          ls "C:\Program Files (x86)\Microsoft Visual Studio\2019\Enterprise\VC\Tools\MSVC\14.29.30133"
+          ls "C:\Program Files (x86)\Microsoft Visual Studio\2019\Enterprise\VC\Tools\MSVC\14.29.30133\bin"
 
       - name: Check out current repository
         uses: actions/checkout@v3
