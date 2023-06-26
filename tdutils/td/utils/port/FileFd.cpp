@@ -169,12 +169,12 @@ Result<FileFd> FileFd::open(CSlice filepath, int32 flags, int32 mode) {
     return OS_ERROR(PSLICE() << "File \"" << filepath << "\" can't be " << PrintFlags{flags});
   }
 
-#if TD_DARWIN
-    LOG(INFO) << "pwrite setting F_NOCACHE";
-    if (fcntl(native_fd, F_NOCACHE, 1) == -1) {
-        return OS_ERROR(PSLICE() << "File \"" << filepath << "\" can't set F_NOCACHE");
-    }
-#endif
+//#if TD_DARWIN
+//    LOG(INFO) << "pwrite setting F_NOCACHE";
+//    if (fcntl(native_fd, F_NOCACHE, 1) == -1) {
+//        return OS_ERROR(PSLICE() << "File \"" << filepath << "\" can't set F_NOCACHE");
+//    }
+//#endif
 
   return from_native_fd(NativeFd(native_fd));
 #elif TD_PORT_WINDOWS
