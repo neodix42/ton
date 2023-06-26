@@ -72,7 +72,7 @@ StringBuilder &operator<<(StringBuilder &sb, const PrintFlags &print_flags) {
   } else if (flags & FileFd::CreateNew) {
     sb << "created ";
   } else {
-    sb << "opened ";:q!
+    sb << "opened ";
 
   }
 
