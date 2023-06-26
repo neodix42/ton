@@ -72,7 +72,8 @@ StringBuilder &operator<<(StringBuilder &sb, const PrintFlags &print_flags) {
   } else if (flags & FileFd::CreateNew) {
     sb << "created ";
   } else {
-    sb << "opened ";
+    sb << "opened ";:q!
+
   }
 
   if ((flags & FileFd::Write) && (flags & FileFd::Read)) {
@@ -168,12 +169,6 @@ Result<FileFd> FileFd::open(CSlice filepath, int32 flags, int32 mode) {
   if (native_fd < 0) {
     return OS_ERROR(PSLICE() << "File \"" << filepath << "\" can't be " << PrintFlags{flags});
   }
-
-#if TD_DARWIN
-    if (fcntl(native_fd, F_NOCACHE, 1) == -1) {
-        return OS_ERROR(PSLICE() << "File \"" << filepath << "\" can't set F_NOCACHE");
-    }
-#endif
 
   return from_native_fd(NativeFd(native_fd));
 #elif TD_PORT_WINDOWS
@@ -331,10 +326,17 @@ Result<size_t> FileFd::pwrite(Slice slice, int64 offset) {
     return Status::Error("Offset must be non-negative");
   }
   auto native_fd = get_native_fd().fd();
-#if TD_PORT_POSIX
+#if TD_DARWIN
   TRY_RESULT(offset_off_t, narrow_cast_safe<off_t>(offset));
-  auto bytes_written =
-      detail::skip_eintr([&] { return ::pwrite(native_fd, slice.begin(), slice.size(), offset_off_t); });
+  auto bytes_written = detail::skip_eintr([&] {
+    return ::pwrite(native_fd, slice.begin(), static_cast<int>(slice.size()), offset_off_t);
+  });
+  bool success = bytes_written >= 0;
+#elif TD_PORT_POSIX
+  TRY_RESULT(offset_off_t, narrow_cast_safe<off_t>(offset));
+  auto bytes_written = detail::skip_eintr([&] {
+    return ::pwrite(native_fd, slice.begin(), slice.size(), offset_off_t);
+  });
   bool success = bytes_written >= 0;
 #elif TD_PORT_WINDOWS
   DWORD bytes_written = 0;
