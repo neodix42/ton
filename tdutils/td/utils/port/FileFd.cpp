@@ -164,6 +164,13 @@ Result<FileFd> FileFd::open(CSlice filepath, int32 flags, int32 mode) {
   }
 #endif
 
+#if TD_DARWIN
+    LOG(INFO) << "pwrite setting F_NOCACHE";
+    if (fcntl(native_fd, F_NOCACHE, 1) == -1) {
+        return OS_ERROR(PSLICE() << "File \"" << filepath << "\" can't set F_NOCACHE");
+    }
+#endif
+
   int native_fd = detail::skip_eintr([&] { return ::open(filepath.c_str(), native_flags, static_cast<mode_t>(mode)); });
   if (native_fd < 0) {
     return OS_ERROR(PSLICE() << "File \"" << filepath << "\" can't be " << PrintFlags{flags});
