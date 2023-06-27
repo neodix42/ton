@@ -84,7 +84,7 @@ class WriteFile : public td::actor::Actor {
       auto data = std::move(*data_ptr);
       td::uint64 offset = 0;
       while (data.size() > 0) {
-        TRY_RESULT(s, fd.pwrite(data.as_slice(), offset));
+        TRY_RESULT(s, fd.write(data.as_slice(), offset));
         offset += s;
         data.confirm_read(s);
       }
