@@ -73,7 +73,6 @@ StringBuilder &operator<<(StringBuilder &sb, const PrintFlags &print_flags) {
     sb << "created ";
   } else {
     sb << "opened ";
-
   }
 
   if ((flags & FileFd::Write) && (flags & FileFd::Read)) {
@@ -326,14 +325,9 @@ Result<size_t> FileFd::pwrite(Slice slice, int64 offset) {
     return Status::Error("Offset must be non-negative");
   }
   auto native_fd = get_native_fd().fd();
-#if TD_DARWIN
+if TD_PORT_POSIX
   TRY_RESULT(offset_off_t, narrow_cast_safe<off_t>(offset));
-  auto bytes_written = detail::skip_eintr([&] {
-    return ::pwrite(native_fd, slice.begin(), static_cast<int>(slice.size()), offset_off_t);
-  });
-  bool success = bytes_written >= 0;
-#elif TD_PORT_POSIX
-  TRY_RESULT(offset_off_t, narrow_cast_safe<off_t>(offset));
+  LOG(INFO) << "test-pwrite,  offset_off_t " << offset_off_t << ", off_t " << off_t << ", slice.size() " << slice.size();
   auto bytes_written = detail::skip_eintr([&] {
     return ::pwrite(native_fd, slice.begin(), slice.size(), offset_off_t);
   });
