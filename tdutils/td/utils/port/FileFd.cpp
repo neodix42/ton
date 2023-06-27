@@ -325,9 +325,9 @@ Result<size_t> FileFd::pwrite(Slice slice, int64 offset) {
     return Status::Error("Offset must be non-negative");
   }
   auto native_fd = get_native_fd().fd();
-if TD_PORT_POSIX
+#if TD_PORT_POSIX
   TRY_RESULT(offset_off_t, narrow_cast_safe<off_t>(offset));
-  LOG(INFO) << "test-pwrite,  offset_off_t " << offset_off_t << ", off_t " << off_t << ", slice.size() " << slice.size();
+  LOG(INFO) << "test-pwrite,  offset_off_t " << offset_off_t << ", slice.size() " << slice.size();
   auto bytes_written = detail::skip_eintr([&] {
     return ::pwrite(native_fd, slice.begin(), slice.size(), offset_off_t);
   });
