@@ -31,7 +31,7 @@ jobs:
     - name: Configure & Build
       run: |
         export CC=$(which clang-16)
-        export CXX=$(which clang++16)
+        export CXX=$(which clang++-16)
         export CCACHE_DISABLE=1
 
         git clone https://github.com/openssl/openssl openssl_1_1_1

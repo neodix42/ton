@@ -34,7 +34,7 @@ jobs:
     - name: Configure & Build
       run: |
         export CC=$(which clang-16)
-        export CXX=$(which clang++16)
+        export CXX=$(which clang++-16)
         export CCACHE_DISABLE=1
 
         mkdir build-${{ matrix.os }}
