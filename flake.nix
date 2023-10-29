@@ -50,6 +50,8 @@
           ] ++ optionals (staticGlibc || staticMusl) [
             "-DCMAKE_LINK_SEARCH_START_STATIC=ON"
             "-DCMAKE_LINK_SEARCH_END_STATIC=ON"
+          ] ++ optionals (stdenv.isDarwin) [
+            "-DCMAKE_CXX_FLAGS=-stdlib=libc++" "-DCMAKE_OSX_DEPLOYMENT_TARGET:STRING=11.7"
           ];
 
           LDFLAGS = optional staticExternalDeps (concatStringsSep " " [
