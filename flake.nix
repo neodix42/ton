@@ -89,25 +89,7 @@
     in with flake-utils.lib;
     (nixpkgs-stable.lib.recursiveUpdate
       (eachSystem (with system; [ x86_64-linux aarch64-linux ]) (system:
-        let
-          host = hostPkgs system;
-          # look out for https://github.com/NixOS/nixpkgs/issues/129595 for progress on better infra for this
-          #
-          # nixos 19.09 ships with glibc 2.27
-          # we could also just override glibc source to a particular release
-          # but then we'd need to port patches as well
-          nixos1909 = (import (builtins.fetchTarball {
-            url = "https://channels.nixos.org/nixos-19.09/nixexprs.tar.xz";
-            sha256 = "1vp1h2gkkrckp8dzkqnpcc6xx5lph5d2z46sg2cwzccpr8ay58zy";
-          }) { inherit system; });
-          glibc227 = nixos1909.glibc // { pname = "glibc"; };
-          stdenv227 = let
-            cc = host.wrapCCWith {
-              cc = nixos1909.buildPackages.gcc-unwrapped;
-              libc = glibc227;
-              bintools = host.binutils.override { libc = glibc227; };
-            };
-          in (host.overrideCC host.stdenv cc);
+        let host = hostPkgs system;
         in rec {
           packages = rec {
             ton-normal = ton { inherit host; };
@@ -121,15 +103,17 @@
               in ton {
                 inherit host;
                 inherit pkgs;
-                stdenv =
-                  pkgs.gcc12Stdenv; # doesn't build on aarch64-linux w/default GCC 9
+                stdenv = pkgs.gcc12Stdenv;
                 staticMusl = true;
               };
-            ton-oldglibc = (ton {
+            ton-oldglibc =
+              let pkgs = nixpkgs-stable.legacyPackages.${system}.pkgsStatic;
+              in ton {
               inherit host;
-              stdenv = stdenv227;
+              inherit pkgs;
+              stdenv = pkgs.gcc12Stdenv;
               staticExternalDeps = true;
-            });
+            };
             ton-oldglibc_staticbinaries = host.symlinkJoin {
               name = "ton";
               paths = [ ton-musl.bin ton-oldglibc.out ];
