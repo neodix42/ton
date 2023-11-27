@@ -29,4 +29,4 @@ jobs:
         with:
           push: false
           context: ./docker
-          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+          tags: ${{ env.REGISTRY }}/test/ton:latest
