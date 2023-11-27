@@ -19,7 +19,7 @@ WORKDIR /ton
 
 RUN mkdir build && \
 	cd build && \
-	cmake -GNinja -DOPENSSL_FOUND=1 -DOPENSSL_INCLUDE_DIR=/openssl_3/include -DOPENSSL_CRYPTO_LIBRARY=/openssl_3/libcrypto.a -DCMAKE_BUILD_TYPE=Release -DPORTABLE=1 -DTON_ARCH= -DCMAKE_CXX_FLAGS="-mavx2" .. && \
+	cmake -GNinja -DOPENSSL_FOUND=1 -DOPENSSL_INCLUDE_DIR=/openssl_3/include -DOPENSSL_CRYPTO_LIBRARY=/openssl_3/libcrypto.a -DCMAKE_BUILD_TYPE=Release -DPORTABLE=1 -DTON_ARCH= .. && \
 	ninja storage-daemon storage-daemon-cli tonlibjson fift func validator-engine validator-engine-console generate-random-id dht-server lite-client
 
 FROM ubuntu:20.04
