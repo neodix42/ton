@@ -12,6 +12,8 @@ RUN git checkout openssl-3.1.4 && \
     ./config && \
     make build_libs -j4
 
+WORKDIR /
+
 RUN git clone --recursive https://github.com/ton-blockchain/ton
 WORKDIR /ton
 
