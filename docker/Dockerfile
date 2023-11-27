@@ -1,17 +1,23 @@
 FROM ubuntu:20.04 as builder
 RUN apt-get update && \
-	DEBIAN_FRONTEND=noninteractive apt-get install -y build-essential cmake clang-6.0 openssl libssl-dev zlib1g-dev gperf wget git ninja-build libsecp256k1-dev libsodium-dev libmicrohttpd-dev pkg-config && \
+	DEBIAN_FRONTEND=noninteractive apt-get install -y build-essential cmake clang openssl libssl-dev zlib1g-dev gperf wget git ninja-build libsecp256k1-dev libsodium-dev libmicrohttpd-dev pkg-config && \
 	rm -rf /var/lib/apt/lists/*
-ENV CC clang-6.0
-ENV CXX clang++-6.0
+ENV CC clang
+ENV CXX clang++
 ENV CCACHE_DISABLE 1
 WORKDIR /
+RUN git clone https://github.com/openssl/openssl openssl_3
+WORKDIR /openssl_3
+RUN git checkout openssl-3.1.4 && \
+    ./config && \
+    make build_libs -j4
+
 RUN git clone --recursive https://github.com/ton-blockchain/ton
 WORKDIR /ton
 
 RUN mkdir build && \
 	cd build && \
-	cmake -GNinja -DCMAKE_BUILD_TYPE=Release -DPORTABLE=1 -DTON_ARCH= -DCMAKE_CXX_FLAGS="-mavx2" .. && \
+	cmake -GNinja -DOPENSSL_FOUND=1 -DOPENSSL_INCLUDE_DIR=/openssl_3/include -DOPENSSL_CRYPTO_LIBRARY=/openssl_3/libcrypto.a -DCMAKE_BUILD_TYPE=Release -DPORTABLE=1 -DTON_ARCH= -DCMAKE_CXX_FLAGS="-mavx2" .. && \
 	ninja storage-daemon storage-daemon-cli tonlibjson fift func validator-engine validator-engine-console generate-random-id dht-server lite-client
 
 FROM ubuntu:20.04
