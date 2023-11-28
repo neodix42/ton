@@ -21,8 +21,9 @@
           src = ./.;
 
           nativeBuildInputs = with host;
-            [ cmake ninja pkg-config git ] ++
-            optionals stdenv.isLinux [ dpkg rpm createrepo_c pacman ];
+
+          [ cmake ninja pkg-config git ] ++
+          optionals stdenv.isLinux [ dpkg rpm createrepo_c pacman ];
           buildInputs = with pkgs;
           # at some point nixpkgs' pkgsStatic will build with static glibc
           # then we can skip these manual overrides
@@ -37,6 +38,7 @@
               [
                 (openssl.override { static = true; }).dev
                 (zlib.override { shared = false; }).dev
+                (optionalString stdenv.cc.isGNU (gnutls.override { withP11-kit = false; }).dev)
             ]
             ++ optionals (!stdenv.isDarwin) [ pkgsStatic.libmicrohttpd.dev pkgsStatic.libsodium.dev secp256k1 ]
             ++ optionals stdenv.isDarwin [ (libiconv.override { enableStatic = true; enableShared = false; }) ]
@@ -45,14 +47,10 @@
 
           dontAddStaticConfigureFlags = stdenv.isDarwin;
 
-          cmakeFlags = [ "-DTON_USE_ABSEIL=OFF" "-DNIX=ON" ] ++ optionals staticMusl [
-            "-DCMAKE_CROSSCOMPILING=OFF" # pkgsStatic sets cross
-          ] ++ optionals (staticGlibc || staticMusl) [
-            "-DCMAKE_LINK_SEARCH_START_STATIC=ON"
-            "-DCMAKE_LINK_SEARCH_END_STATIC=ON"
-          ] ++ optionals (stdenv.isDarwin) [
-            "-DCMAKE_CXX_FLAGS=-stdlib=libc++" "-DCMAKE_OSX_DEPLOYMENT_TARGET:STRING=11.7"
-          ];
+          cmakeFlags = [ "-DTON_USE_ABSEIL=OFF" "-DNIX=ON" ]
+          ++ optionals staticMusl [ "-DCMAKE_CROSSCOMPILING=OFF" ]
+          ++ optionals (staticGlibc || staticMusl) [ "-DCMAKE_LINK_SEARCH_START_STATIC=ON" "-DCMAKE_LINK_SEARCH_END_STATIC=ON" ]
+          ++ optionals (stdenv.isDarwin) [ "-DCMAKE_CXX_FLAGS=-stdlib=libc++" "-DCMAKE_OSX_DEPLOYMENT_TARGET:STRING=11.7" ];
 
           LDFLAGS = optional staticExternalDeps (concatStringsSep " " [
             (optionalString stdenv.cc.isGNU "-static-libgcc")
@@ -91,19 +89,15 @@
       (eachSystem (with system; [ x86_64-linux aarch64-linux ]) (system:
         let
           host = hostPkgs system;
-          # look out for https://github.com/NixOS/nixpkgs/issues/129595 for progress on better infra for this
-          #
-          # nixos 19.09 ships with glibc 2.27
-          # we could also just override glibc source to a particular release
-          # but then we'd need to port patches as well
-          nixos1909 = (import (builtins.fetchTarball {
-            url = "https://channels.nixos.org/nixos-19.09/nixexprs.tar.xz";
-            sha256 = "1vp1h2gkkrckp8dzkqnpcc6xx5lph5d2z46sg2cwzccpr8ay58zy";
+          pkgs = nixpkgs-stable.legacyPackages.${system}.pkgsStatic;
+          nixos2305 = (import (builtins.fetchTarball {
+            url = "https://releases.nixos.org/nixos/23.05/nixos-23.05.4974.d2e4de209881/nixexprs.tar.xz";
+            sha256 = "1g7bzwd3jc076vh4iclmnz9g4vazn2lxsr6rgwyvl35g1mf7fzl9";
           }) { inherit system; });
-          glibc227 = nixos1909.glibc // { pname = "glibc"; };
+          glibc227 = nixos2305.glibc;
           stdenv227 = let
             cc = host.wrapCCWith {
-              cc = nixos1909.buildPackages.gcc-unwrapped;
+              cc = nixos2305.buildPackages.gcc12;
               libc = glibc227;
               bintools = host.binutils.override { libc = glibc227; };
             };
@@ -121,8 +115,7 @@
               in ton {
                 inherit host;
                 inherit pkgs;
-                stdenv =
-                  pkgs.gcc12Stdenv; # doesn't build on aarch64-linux w/default GCC 9
+                stdenv = pkgs.gcc12Stdenv;
                 staticMusl = true;
               };
             ton-oldglibc = (ton {
