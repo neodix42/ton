@@ -43,25 +43,68 @@ __The Open Network (TON)__ is a fast, secure, scalable blockchain focused on han
 - To work on TON check [wallets](https://ton.app/wallets), [explorers](https://ton.app/explorers), [DEXes](https://ton.app/dex) and [utilities](https://ton.app/utilities)
 - To interact with TON check [APIs](https://ton.org/docs/develop/dapps/apis/)
 
-## Updates flow
+## Get TON blockchain precompiled executables
+TON distributes precompiled executables via various package managers.
+All distribution packages contain the executables from the latest TON release. 
 
-* **master branch** - mainnet is running on this stable branch.
+### Install deb (apt)
+#### Debian, Ubuntu, Linux Mint... (x86-64, aarch64)
+```
+sudo apt-key adv --keyserver keyserver.ubuntu.com --recv-keys F6A649124520E5F3
+sudo add-apt-repository ppa:ton-foundation/ppa
+sudo apt update
+sudo apt install ton
+```
 
-    Only emergency updates, urgent updates, or updates that do not affect the main codebase (GitHub workflows / docker images / documentation) are committed directly to this branch.
+### Install via brew
+#### macOS (x86-64, aarch64)
+```
+brew tap ton-blockchain/ton
+brew install ton
 
-* **testnet branch** - testnet is running on this branch. The branch contains a set of new updates. After testing, the testnet branch is merged into the master branch and then a new set of updates is added to testnet branch.
+# upgrade
+brew update
+brew reinstall ton
+```
 
-* **backlog** - other branches that are candidates to getting into the testnet branch in the next iteration.
+### Install via Chocolatey
+#### Windows (x86-64)
+Please, be aware that multiple false positive alarms from various antivirus vendors may occur.
+This is an expected behaviour and there is no reason to worry.
 
-Usually, the response to your pull request will indicate which section it falls into.
+Open an elevated terminal (Run as Administrator) and execute the below command:
+```
+choco install ton
+```
 
+### Install RPM (yum)
+#### RedHat, Fedora, CentOS... (x86-64, aarch64)
+```
+sudo bash -c 'cat > /etc/yum.repos.d/ton.repo << EOF
+[ton]
+name=TON
+baseurl=https://ton-blockchain.github.io/packages/rpm
+enabled=1
+type=rpm
+gpgcheck=0
+EOF'
 
-## "Soft" Pull Request rules
+sudo yum install -y ton
+```
 
-* Thou shall not merge your own PRs, at least one person should review the PR and merge it (4-eyes rule)
-* Thou shall make sure that workflows are cleanly completed for your PR before considering merge
+### Install AUR (pamac)
+#### Manjaro, RebornOS, Arch Linux... (x86-64, aarch64)
+```
+sudo pamac build -no-confirm ton-bin
+```
 
-## Build TON blockchain
+## Build TON blockchain from sources
+
+Clone current repository and refer below to the section for your OS. 
+```bash
+git clone --recursive https://github.com/ton-blockchain/ton.git
+cd ton
+```
 
 ### Ubuntu 20.4, 22.04 (x86-64, aarch64)
 Install additional system libraries
@@ -146,6 +189,25 @@ Then compile TON with Nix by executing below command from the root folder:
 ```
 More examples for other platforms can be found under `assembly/nix`.  
 
+
 ## Running tests
 
 Tests are executed by running `ctest` in the build directory. See `doc/Tests.md` for more information.
+
+## Updates flow
+
+* **master branch** - mainnet is running on this stable branch.
+
+  Only emergency updates, urgent updates, or updates that do not affect the main codebase (GitHub workflows / docker images / documentation) are committed directly to this branch.
+
+* **testnet branch** - testnet is running on this branch. The branch contains a set of new updates. After testing, the testnet branch is merged into the master branch and then a new set of updates is added to testnet branch.
+
+* **backlog** - other branches that are candidates to getting into the testnet branch in the next iteration.
+
+Usually, the response to your pull request will indicate which section it falls into.
+
+
+## "Soft" Pull Request rules
+
+* Thou shall not merge your own PRs, at least one person should review the PR and merge it (4-eyes rule)
+* Thou shall make sure that workflows are cleanly completed for your PR before considering merge
