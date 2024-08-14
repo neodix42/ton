@@ -27,7 +27,7 @@ RUN apt-get update && \
     apt-get install -y wget curl libatomic1 openssl libsecp256k1-dev libsodium-dev libmicrohttpd-dev liblz4-dev libjemalloc-dev htop net-tools netcat iptraf-ng jq tcpdump pv plzip && \
     rm -rf /var/lib/apt/lists/*
 
-RUN mkdir -p /var/ton-work/db /var/ton-work/scripts /usr/share/ton/
+RUN mkdir -p /var/ton-work/db /var/ton-work/scripts /usr/share/ton/ /usr/lib/fift/
 
 COPY --from=builder /ton/build/storage/storage-daemon/storage-daemon /usr/local/bin/
 COPY --from=builder /ton/build/storage/storage-daemon/storage-daemon-cli /usr/local/bin/
@@ -38,7 +38,7 @@ COPY --from=builder /ton/build/utils/generate-random-id /usr/local/bin/
 COPY --from=builder /ton/build/crypto/fift /usr/local/bin/
 COPY --from=builder /ton/build/crypto/func /usr/local/bin/
 COPY --from=builder /ton/build/crypto/smartcont /usr/share/ton/
-COPY --from=builder /ton/build/crypto/fift/lib /usr/lib/
+COPY --from=builder /ton/build/crypto/fift/lib/* /usr/lib/fift/
 
 WORKDIR /var/ton-work/db
 COPY ./docker/init.sh ./docker/control.template /var/ton-work/scripts/
