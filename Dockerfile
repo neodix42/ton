@@ -37,8 +37,8 @@ COPY --from=builder /ton/build/validator-engine-console/validator-engine-console
 COPY --from=builder /ton/build/utils/generate-random-id /usr/local/bin/
 COPY --from=builder /ton/build/crypto/fift /usr/local/bin/
 COPY --from=builder /ton/build/crypto/func /usr/local/bin/
-COPY --from=builder /ton/build/crypto/smartcont /usr/share/ton/
-COPY --from=builder /ton/build/crypto/fift/lib/* /usr/lib/fift/
+COPY --from=builder /ton/crypto/smartcont /usr/share/ton/
+COPY --from=builder /ton/crypto/fift/lib/* /usr/lib/fift/
 
 WORKDIR /var/ton-work/db
 COPY ./docker/init.sh ./docker/control.template /var/ton-work/scripts/
