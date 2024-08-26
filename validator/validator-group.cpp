@@ -51,9 +51,9 @@ void ValidatorGroup::generate_block_candidate(
     return validatorsession::ValidatorSession::GeneratedCandidate{std::move(res), false};
   }));
   run_collate_query(
-      shard_, min_ts_, min_masterchain_block_id_, prev_block_ids_,
-      Ed25519_PublicKey{local_id_full_.ed25519_value().raw()}, validator_set_, opts_->get_collator_options(), manager_,
-      td::Timestamp::in(10.0), [SelfId = actor_id(this), cache = cached_collated_block_](td::Result<BlockCandidate> R) {
+      shard_, min_masterchain_block_id_, prev_block_ids_, Ed25519_PublicKey{local_id_full_.ed25519_value().raw()},
+      validator_set_, opts_->get_collator_options(), manager_, td::Timestamp::in(10.0),
+      [SelfId = actor_id(this), cache = cached_collated_block_](td::Result<BlockCandidate> R) {
         td::actor::send_closure(SelfId, &ValidatorGroup::generated_block_candidate, std::move(cache), std::move(R));
       });
 }
@@ -132,8 +132,8 @@ void ValidatorGroup::validate_block_candidate(td::uint32 round_id, BlockCandidat
   }
   VLOG(VALIDATOR_DEBUG) << "validating block candidate " << next_block_id;
   block.id = next_block_id;
-  run_validate_query(shard_, min_ts_, min_masterchain_block_id_, prev_block_ids_, std::move(block), validator_set_,
-                     manager_, td::Timestamp::in(15.0), std::move(P));
+  run_validate_query(shard_, min_masterchain_block_id_, prev_block_ids_, std::move(block), validator_set_, manager_,
+                     td::Timestamp::in(15.0), std::move(P));
 }
 
 void ValidatorGroup::update_approve_cache(CacheKey key, UnixTime value) {
@@ -357,10 +357,9 @@ void ValidatorGroup::create_session() {
   }
 }
 
-void ValidatorGroup::start(std::vector<BlockIdExt> prev, BlockIdExt min_masterchain_block_id, UnixTime min_ts) {
+void ValidatorGroup::start(std::vector<BlockIdExt> prev, BlockIdExt min_masterchain_block_id) {
   prev_block_ids_ = prev;
   min_masterchain_block_id_ = min_masterchain_block_id;
-  min_ts_ = min_ts;
   cached_collated_block_ = nullptr;
   approved_candidates_cache_.clear();
   started_ = true;
@@ -386,6 +385,7 @@ void ValidatorGroup::start(std::vector<BlockIdExt> prev, BlockIdExt min_masterch
   stats.session_id = session_id_;
   stats.shard = shard_;
   stats.cc_seqno = validator_set_->get_catchain_seqno();
+  stats.last_key_block_seqno = last_key_block_seqno_;
   stats.timestamp = td::Clocks::system();
   td::uint32 idx = 0;
   for (const auto& node : validator_set_->export_vector()) {
@@ -415,6 +415,16 @@ void ValidatorGroup::destroy() {
                               }
                               stats.cc_seqno = cc_seqno;
                               td::actor::send_closure(manager, &ValidatorManager::log_validator_session_stats, block_id,
+                                                      std::move(stats));
+                            });
+    td::actor::send_closure(session_, &validatorsession::ValidatorSession::get_end_stats,
+                            [manager = manager_](td::Result<validatorsession::EndValidatorGroupStats> R) {
+                              if (R.is_error()) {
+                                LOG(DEBUG) << "Failed to get validator session end stats: " << R.move_as_error();
+                                return;
+                              }
+                              auto stats = R.move_as_ok();
+                              td::actor::send_closure(manager, &ValidatorManager::log_end_validator_group_stats,
                                                       std::move(stats));
                             });
     auto ses = session_.release();
