@@ -18,9 +18,9 @@ cp assembly/nix/linux-x86-64* .
 export NIX_PATH=nixpkgs=https://github.com/nixOS/nixpkgs/archive/23.05.tar.gz
 
 if [ "$with_tests" = true ]; then
-  nix-build linux-x86-64-static.nix --arg testing true
+  nix-build linux-x86-64-static-no-jemalloc.nix --arg testing true
 else
-  nix-build linux-x86-64-static.nix
+  nix-build linux-x86-64-static-no-jemalloc.nix
 fi
 
 mkdir -p artifacts/lib

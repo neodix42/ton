@@ -18,9 +18,9 @@ cp assembly/nix/macos-* .
 export NIX_PATH=nixpkgs=https://github.com/nixOS/nixpkgs/archive/23.05.tar.gz
 
 if [ "$with_tests" = true ]; then
-  nix-build macos-static.nix --arg testing true
+  nix-build macos-static-no-jemalloc.nix --arg testing true
 else
-  nix-build macos-static.nix
+  nix-build macos-static-no-jemalloc.nix
 fi
 
 mkdir -p artifacts/lib
