@@ -16,6 +16,13 @@ while getopts 'ta' flag; do
   esac
 done
 
+clang-16 -v
+if [ $? -ne 0 ]; then
+  wget https://apt.llvm.org/llvm.sh
+  chmod +x llvm.sh
+  sudo ./llvm.sh 16 all
+fi
+
 if [ ! -d "build" ]; then
   mkdir build
   cd build
