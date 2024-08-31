@@ -88,7 +88,7 @@ pipeline {
                     }
                     steps {
                         timeout(time: 180, unit: 'MINUTES') {
-                            sh 'sleep 3m'
+                            sh 'sleep 180'
                             sh '''
                                 cp assembly/native/build-macos-shared.sh .
                                 chmod +x build-macos-shared.sh
@@ -127,7 +127,7 @@ pipeline {
                     }
                     steps {
                         timeout(time: 180, unit: 'MINUTES') {
-                            sh 'sleep 3m'
+                            sh 'sleep 180'
                             sh '''
                                 cp assembly/native/build-macos-shared.sh .
                                 chmod +x build-macos-shared.sh
@@ -166,7 +166,7 @@ pipeline {
                     }
                     steps {
                         timeout(time: 180, unit: 'MINUTES') {
-                            sh 'sleep 3m'
+                            sh 'sleep 180'
                             sh '''
                                 cp assembly/native/build-macos-shared.sh .
                                 chmod +x build-macos-shared.sh
