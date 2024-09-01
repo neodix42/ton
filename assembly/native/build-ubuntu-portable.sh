@@ -16,6 +16,13 @@ while getopts 'ta' flag; do
   esac
 done
 
+clang-16 -v
+if [ $? -ne 0 ]; then
+  wget https://apt.llvm.org/llvm.sh
+  chmod +x llvm.sh
+  sudo ./llvm.sh 16 all
+fi
+
 if [ ! -d "build" ]; then
   mkdir build
   cd build
@@ -205,8 +212,6 @@ if [ "$with_artifacts" = true ]; then
      artifacts
   test $? -eq 0 || { echo "Can't copy final binaries"; exit 1; }
   chmod +x artifacts/*
-  cp -R crypto/smartcont artifacts
-  cp -R crypto/fift/lib artifacts
 fi
 
 if [ "$with_tests" = true ]; then
