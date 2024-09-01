@@ -210,8 +210,8 @@ if [ "$with_artifacts" = true ]; then
      artifacts
   test $? -eq 0 || { echo "Can't copy final binaries"; exit 1; }
   chmod +x artifacts/*
-  cp crypto/fift/lib artifacts/
-  cp -R crypto/smartcont/ artifacts/
+  cp -r crypto/fift/lib artifacts/
+  cp -r crypto/smartcont/ artifacts/
 fi
 
 if [ "$with_tests" = true ]; then
