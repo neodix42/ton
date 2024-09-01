@@ -55,7 +55,7 @@ pipeline {
                             '''
                             sh '''
                                 cd artifacts
-                                zip -9r build-macos-portable.sh ./*
+                                zip -9r ton-x86-64-macos-portable ./*
                             '''
                             archiveArtifacts artifacts: 'artifacts/ton-x86-64-macos-portable.zip'
                         }
