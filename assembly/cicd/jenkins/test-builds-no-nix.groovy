@@ -13,7 +13,7 @@ pipeline {
                             sh '''
                                 cp assembly/native/build-ubuntu-portable.sh .
                                 chmod +x build-ubuntu-portable.sh
-                                ./build-ubuntu-portable.sh
+                                ./build-ubuntu-portable.sh -a
                             '''
                             sh '''
                                 cd artifacts
@@ -32,7 +32,7 @@ pipeline {
                             sh '''
                                 cp assembly/native/build-ubuntu-portable.sh .
                                 chmod +x build-ubuntu-portable.sh
-                                ./build-ubuntu-portable.sh
+                                ./build-ubuntu-portable.sh -a
                             '''
                             sh '''
                                 cd artifacts
@@ -51,7 +51,7 @@ pipeline {
                             sh '''
                                 cp assembly/native/build-macos-portable.sh .
                                 chmod +x build-macos-portable.sh
-                                ./build-macos-portable.sh
+                                ./build-macos-portable.sh -a
                             '''
                             sh '''
                                 cd artifacts
@@ -70,7 +70,7 @@ pipeline {
                             sh '''
                                 cp assembly/native/build-macos-portable.sh .
                                 chmod +x build-macos-portable.sh
-                                ./build-macos-portable.sh
+                                ./build-macos-portable.sh -a
                             '''
                             sh '''
                                 cd artifacts
