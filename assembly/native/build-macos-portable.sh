@@ -212,7 +212,6 @@ if [ "$with_artifacts" = true ]; then
   cp build/adnl/adnl-proxy artifacts/
   cp build/emulator/libemulator.dylib artifacts/
   chmod +x artifacts/*
-  chmod +x artifacts/*
   rsync -r crypto/smartcont artifacts/
   rsync -r crypto/fift/lib artifacts/
 fi
