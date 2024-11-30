@@ -6,19 +6,7 @@ if (NOT SECP256K1_LIBRARY)
 
     file(MAKE_DIRECTORY ${SECP256K1_BINARY_DIR})
 
-    if (MSVC)
-      set(SECP256K1_BINARY_DIR ${CMAKE_CURRENT_SOURCE_DIR}/third-party/secp256k1)
-      set(SECP256K1_LIBRARY ${SECP256K1_SOURCE_DIR}/build/src/Release/libsecp256k1.lib)
-      set(SECP256K1_INCLUDE_DIR ${SECP256K1_BINARY_DIR}/include)
-      add_custom_command(
-        WORKING_DIRECTORY ${SECP256K1_SOURCE_DIR}
-        COMMAND cmake -E env CFLAGS="/WX" cmake -A x64 -B build -DSECP256K1_ENABLE_MODULE_RECOVERY=ON -DSECP256K1_ENABLE_MODULE_EXTRAKEYS=ON -DSECP256K1_BUILD_EXAMPLES=OFF -DBUILD_SHARED_LIBS=OFF
-        COMMAND cmake --build build --config Release
-        COMMENT "Build Secp256k1"
-        DEPENDS ${SECP256K1_SOURCE_DIR}
-        OUTPUT ${SECP256K1_LIBRARY}
-      )
-    elseif (EMSCRIPTEN)
+    if (EMSCRIPTEN)
       set(SECP256K1_BINARY_DIR ${CMAKE_CURRENT_SOURCE_DIR}/third-party/secp256k1)
       set(SECP256K1_LIBRARY ${SECP256K1_BINARY_DIR}/.libs/libsecp256k1.a)
       set(SECP256K1_INCLUDE_DIR ${SECP256K1_SOURCE_DIR}/include)
@@ -32,6 +20,18 @@ if (NOT SECP256K1_LIBRARY)
           DEPENDS ${SECP256K1_SOURCE_DIR}
           OUTPUT ${SECP256K1_LIBRARY}
       )
+    elseif (MINGW)
+        set(SECP256K1_LIBRARY ${SECP256K1_BINARY_DIR}/lib/libsecp256k1.a)
+        add_custom_command(
+            WORKING_DIRECTORY ${SECP256K1_SOURCE_DIR}
+            COMMAND bash autogen.sh
+            COMMAND bash configure -q --disable-option-checking --enable-module-recovery --enable-module-extrakeys --prefix ${SECP256K1_BINARY_DIR} --with-pic --disable-shared --enable-static --disable-tests --disable-benchmark
+            COMMAND make -j16
+            COMMAND make install
+            COMMENT "Build secp256k1"
+            DEPENDS ${SECP256K1_SOURCE_DIR}
+            OUTPUT ${SECP256K1_LIBRARY}
+        )
     else()
       if (NOT NIX)
         set(SECP256K1_LIBRARY ${SECP256K1_BINARY_DIR}/lib/libsecp256k1.a)
