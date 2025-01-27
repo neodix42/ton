@@ -3,6 +3,11 @@ name: Create tolk release
 on:
   workflow_dispatch:
     inputs:
+      branch:
+        description: 'branch name'
+        required: true
+        default: 'master'
+        type: string
       tag:
         description: 'tolk release and tag name'
         required: true
@@ -22,7 +27,7 @@ jobs:
           workflow: build-ton-linux-arm64-appimage.yml
           path: artifacts
           workflow_conclusion: success
-          branch: master
+          branch: ${{ inputs.branch }}
           skip_unpack: false
 
       - name: Download and unzip Linux x86-64 artifacts
@@ -31,7 +36,7 @@ jobs:
           workflow: build-ton-linux-x86-64-appimage.yml
           path: artifacts
           workflow_conclusion: success
-          branch: master
+          branch: ${{ inputs.branch }}
           skip_unpack: false
 
       - name: Download and unzip Mac x86-64 artifacts
@@ -40,7 +45,7 @@ jobs:
           workflow: build-ton-macos-13-x86-64-portable.yml
           path: artifacts
           workflow_conclusion: success
-          branch: master
+          branch: ${{ inputs.branch }}
           skip_unpack: false
 
       - name: Download and unzip arm64 artifacts
@@ -49,7 +54,7 @@ jobs:
           workflow: build-ton-macos-14-arm64-portable.yml
           path: artifacts
           workflow_conclusion: success
-          branch: master
+          branch: ${{ inputs.branch }}
           skip_unpack: false
 
       - name: Download and unzip Windows artifacts
@@ -58,7 +63,7 @@ jobs:
           workflow: ton-x86-64-windows.yml
           path: artifacts
           workflow_conclusion: success
-          branch: master
+          branch: ${{ inputs.branch }}
           skip_unpack: false
 
       - name: Download WASM artifacts
@@ -67,7 +72,7 @@ jobs:
           workflow: build-ton-wasm-emscripten.yml
           path: artifacts
           workflow_conclusion: success
-          branch: master
+          branch: ${{ inputs.branch }}
           skip_unpack: true
 
       - name: Show all artifacts
