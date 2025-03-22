@@ -20,6 +20,7 @@ jobs:
       run: |
         sudo apt-get update
         sudo apt-get install -y build-essential git cmake ninja-build zlib1g-dev libsecp256k1-dev libmicrohttpd-dev libsodium-dev liblz4-dev libjemalloc-dev ccache
+        mkdir ~/.ccache
 
     - if: matrix.os != 'ubuntu-24.04'
       run: |
@@ -53,9 +54,9 @@ jobs:
 
     - name: Configure TON
       run: |
-        export CC=$(which clang-16)
-        export CXX=$(which clang++-16)
-        echo $CCACHE_DIR
+        CC=$(which clang-16)
+        CXX=$(which clang++-16)
+        CCACHE_DIR=~/.ccache
         ccache --version
         ccache -s        
         git submodule sync --recursive
@@ -72,6 +73,7 @@ jobs:
 
     - name: Compile TON
       run: |
+        CCACHE_DIR=~/.ccache
         cd build
         ninja storage-daemon storage-daemon-cli fift func tolk tonlib tonlibjson tonlib-cli \
         validator-engine lite-client pow-miner validator-engine-console blockchain-explorer \
