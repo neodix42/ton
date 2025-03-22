@@ -32,7 +32,7 @@ jobs:
       uses: actions/cache@v4
       with:
         path: openssl_3
-        key: ${{ runner.os }}-openssl_3
+        key: ${{ runner.os }}-${{ runner.arch }}-openssl_3
 
     - name: Clone and compile OpenSSL 3.1.4
       if: steps.cache-openssl_3.outputs.cache-hit != 'true'
