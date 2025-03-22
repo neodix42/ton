@@ -59,6 +59,7 @@ jobs:
 
     - name: Compile TON
       run: |
+        cd build
         ninja storage-daemon storage-daemon-cli fift func tolk tonlib tonlibjson tonlib-cli \
         validator-engine lite-client pow-miner validator-engine-console blockchain-explorer \
         generate-random-id json2tlo dht-server http-proxy rldp-http-proxy \
