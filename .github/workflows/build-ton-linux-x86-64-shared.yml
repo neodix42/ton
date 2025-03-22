@@ -53,7 +53,7 @@ jobs:
         cd build
         cmake -GNinja -DTON_USE_JEMALLOC=ON .. \
         -DCMAKE_BUILD_TYPE=Release \
-        -DOPENSSL_ROOT_DIR$opensslPath \
+        -DOPENSSL_ROOT_DIR=$opensslPath \
         -DOPENSSL_INCLUDE_DIR=$opensslPath/include \
         -DOPENSSL_CRYPTO_LIBRARY=$opensslPath/libcrypto.so
 
