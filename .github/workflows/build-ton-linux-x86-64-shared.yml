@@ -34,7 +34,7 @@ jobs:
         path: openssl_3
         key: ${{ runner.os }}-${{ runner.arch }}-openssl_3
 
-    - name: Cache TON
+    - name: Cache TON use
       id: cache-ton
       uses: actions/cache@v4
       with:
