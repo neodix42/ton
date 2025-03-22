@@ -19,7 +19,7 @@ jobs:
     - name: Install system libraries
       run: |
         sudo apt-get update
-        sudo apt-get install -y build-essential git cmake ninja-build zlib1g-dev libsecp256k1-dev libmicrohttpd-dev libsodium-dev liblz4-dev libjemalloc-dev
+        sudo apt-get install -y build-essential git cmake ninja-build zlib1g-dev libsecp256k1-dev libmicrohttpd-dev libsodium-dev liblz4-dev libjemalloc-dev ccache
 
     - if: matrix.os != 'ubuntu-24.04'
       run: |
@@ -33,6 +33,13 @@ jobs:
       with:
         path: openssl_3
         key: ${{ runner.os }}-${{ runner.arch }}-openssl_3
+
+    - name: Cache TON
+      id: cache-ton
+      uses: actions/cache@v4
+      with:
+        path: ~/.ccache
+        key: ${{ runner.os }}-${{ runner.arch }}-ccache
 
     - name: Clone and compile OpenSSL 3.1.4
       if: steps.cache-openssl.outputs.cache-hit != 'true'
@@ -48,7 +55,9 @@ jobs:
       run: |
         export CC=$(which clang-16)
         export CXX=$(which clang++-16)
-        export CCACHE_DISABLE=1
+        echo $CCACHE_DIR
+        ccache --version
+        ccache -s        
         git submodule sync --recursive
         git submodule update
         opensslPath=`pwd`/openssl_3
@@ -59,6 +68,7 @@ jobs:
         -DOPENSSL_ROOT_DIR=$opensslPath \
         -DOPENSSL_INCLUDE_DIR=$opensslPath/include \
         -DOPENSSL_CRYPTO_LIBRARY=$opensslPath/libcrypto.so
+        ccache -s
 
     - name: Compile TON
       run: |
@@ -70,3 +80,4 @@ jobs:
         test-vm test-fift test-cells test-smartcont test-net test-tdactor test-tdutils \
         test-tonlib-offline test-adnl test-dht test-rldp test-rldp2 test-catchain \
         test-fec test-tddb test-db test-validator-session-state test-emulator proxy-liteserver
+        ccache -s
