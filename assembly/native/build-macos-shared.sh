@@ -2,7 +2,7 @@
 
 with_tests=false
 with_artifacts=false
-OSX_TARGET=10.15
+OSX_TARGET=11.0
 
 
 while getopts 'taoc:' flag; do
