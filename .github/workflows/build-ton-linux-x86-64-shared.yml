@@ -49,6 +49,11 @@ jobs:
         path: ~/.ccache
         key: ${{ runner.os }}-${{ runner.arch }}-${{ matrix.os }}-ccache
 
+    - if: matrix.os == 'ubuntu-20.04'
+      name: Install gcc-11
+      run: |
+        rm -rf ~/.ccache/*
+
     - name: Build TON
       run: |
         git submodule sync --recursive
