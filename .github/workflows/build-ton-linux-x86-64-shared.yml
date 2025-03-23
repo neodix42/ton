@@ -55,7 +55,7 @@ jobs:
         git submodule update
         cp assembly/native/build-ubuntu-shared.sh .
         chmod +x build-ubuntu-shared.sh
-        ./build-ubuntu-shared.sh -t -a -c
+        ./build-ubuntu-shared.sh -t -c
         ccache -s
 
     - name: Run Tests

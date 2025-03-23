@@ -5,15 +5,25 @@ with_artifacts=false
 OSX_TARGET=10.15
 
 
-while getopts 'tao:' flag; do
+while getopts 'taoc:' flag; do
   case "${flag}" in
     t) with_tests=true ;;
     a) with_artifacts=true ;;
     o) OSX_TARGET=${OPTARG} ;;
+    c) with_ccache=true ;;
     *) break
        ;;
   esac
 done
+
+if [ "$with_ccache" = true ]; then
+  mkdir -p ~/.ccache
+  CCACHE_DIR=~/.ccache
+  ccache -M 0
+  test $? -eq 0 || { echo "ccache not installed"; exit 1; }
+else
+  CCACHE_DISABLE=1
+fi
 
 if [ ! -d "build" ]; then
   mkdir build
@@ -23,18 +33,17 @@ else
   rm -rf .ninja* CMakeCache.txt
 fi
 
-export NONINTERACTIVE=1
-brew install ninja libsodium libmicrohttpd pkg-config automake libtool autoconf gnutls
+NONINTERACTIVE=1
+brew install ninja libsodium libmicrohttpd pkg-config automake libtool autoconf gnutls ccache
 brew install llvm@16
 
 if [ -f /opt/homebrew/opt/llvm@16/bin/clang ]; then
-  export CC=/opt/homebrew/opt/llvm@16/bin/clang
-  export CXX=/opt/homebrew/opt/llvm@16/bin/clang++
+  CC=/opt/homebrew/opt/llvm@16/bin/clang
+  CXX=/opt/homebrew/opt/llvm@16/bin/clang++
 else
-  export CC=/usr/local/opt/llvm@16/bin/clang
-  export CXX=/usr/local/opt/llvm@16/bin/clang++
+  CC=/usr/local/opt/llvm@16/bin/clang
+  CXX=/usr/local/opt/llvm@16/bin/clang++
 fi
-export CCACHE_DISABLE=1
 
 if [ ! -d "lz4" ]; then
   git clone https://github.com/lz4/lz4
@@ -110,8 +119,3 @@ if [ "$with_artifacts" = true ]; then
   chmod -R +x artifacts/*
 fi
 
-if [ "$with_tests" = true ]; then
-  cd build
-#  ctest --output-on-failure -E "test-catchain|test-actors"
-  ctest --output-on-failure --timeout 1800
-fi
