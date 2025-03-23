@@ -18,11 +18,11 @@ done
 
 if [ "$with_ccache" = true ]; then
   mkdir -p ~/.ccache
-  CCACHE_DIR=~/.ccache
+  export CCACHE_DIR=~/.ccache
   ccache -M 0
   test $? -eq 0 || { echo "ccache not installed"; exit 1; }
 else
-  CCACHE_DISABLE=1
+  export CCACHE_DISABLE=1
 fi
 
 if [ ! -d "build" ]; then
@@ -33,17 +33,17 @@ else
   rm -rf .ninja* CMakeCache.txt
 fi
 
-NONINTERACTIVE=1
+export NONINTERACTIVE=1
 brew install ninja pkg-config automake libtool autoconf texinfo
 brew install llvm@16
 
 
 if [ -f /opt/homebrew/opt/llvm@16/bin/clang ]; then
-  CC=/opt/homebrew/opt/llvm@16/bin/clang
-  CXX=/opt/homebrew/opt/llvm@16/bin/clang++
+  export CC=/opt/homebrew/opt/llvm@16/bin/clang
+  export CXX=/opt/homebrew/opt/llvm@16/bin/clang++
 else
-  CC=/usr/local/opt/llvm@16/bin/clang
-  CXX=/usr/local/opt/llvm@16/bin/clang++
+  export CC=/usr/local/opt/llvm@16/bin/clang
+  export CXX=/usr/local/opt/llvm@16/bin/clang++
 fi
 
 if [ ! -d "lz4" ]; then
