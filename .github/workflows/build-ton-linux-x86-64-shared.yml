@@ -22,6 +22,12 @@ jobs:
         sudo apt-get install -y build-essential git cmake ninja-build zlib1g-dev libsecp256k1-dev libmicrohttpd-dev libsodium-dev liblz4-dev libjemalloc-dev ccache
         mkdir ~/.ccache
 
+    - if: matrix.os == 'ubuntu-20.04'
+      run: |
+        sudo apt install -y manpages-dev software-properties-common
+        sudo add-apt-repository ppa:ubuntu-toolchain-r/test
+        sudo apt update && sudo apt install gcc-11 g++-11
+
     - if: matrix.os != 'ubuntu-24.04'
       run: |
         wget https://apt.llvm.org/llvm.sh
@@ -42,43 +48,11 @@ jobs:
         path: ~/.ccache
         key: ${{ runner.os }}-${{ runner.arch }}-${{ matrix.os }}-ccache
 
-    - name: Clone and compile OpenSSL 3.1.4
-      if: steps.cache-openssl.outputs.cache-hit != 'true'
+    - name: Build TON
       run: |
-        git clone https://github.com/openssl/openssl openssl_3
-        cd openssl_3
-        opensslPath=`pwd`
-        git checkout openssl-3.1.4
-        ./config
-        make build_libs -j12
-
-    - name: Configure TON
-      run: |
-        CC=$(which clang-16)
-        CXX=$(which clang++-16)
-        CCACHE_DIR=~/.ccache
-        ccache -s        
         git submodule sync --recursive
         git submodule update
-        opensslPath=`pwd`/openssl_3
-        mkdir build
-        cd build
-        cmake -GNinja -DTON_USE_JEMALLOC=ON .. \
-        -DCMAKE_BUILD_TYPE=Release \
-        -DOPENSSL_ROOT_DIR=$opensslPath \
-        -DOPENSSL_INCLUDE_DIR=$opensslPath/include \
-        -DOPENSSL_CRYPTO_LIBRARY=$opensslPath/libcrypto.so
-        ccache -s
-
-    - name: Compile TON
-      run: |
-        CCACHE_DIR=~/.ccache
-        cd build
-        ninja storage-daemon storage-daemon-cli fift func tolk tonlib tonlibjson tonlib-cli \
-        validator-engine lite-client pow-miner validator-engine-console blockchain-explorer \
-        generate-random-id json2tlo dht-server http-proxy rldp-http-proxy \
-        adnl-proxy create-state emulator test-ed25519 test-ed25519-crypto test-bigint \
-        test-vm test-fift test-cells test-smartcont test-net test-tdactor test-tdutils \
-        test-tonlib-offline test-adnl test-dht test-rldp test-rldp2 test-catchain \
-        test-fec test-tddb test-db test-validator-session-state test-emulator proxy-liteserver
+        cp assembly/native/build-ubuntu-shared.sh .
+        chmod +x build-ubuntu-shared.sh
+        ./build-ubuntu-shared.sh -t -a -c
         ccache -s

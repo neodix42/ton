@@ -1,20 +1,31 @@
 #/bin/bash
 
 #sudo apt-get update
-#sudo apt-get install -y build-essential git cmake ninja-build zlib1g-dev libsecp256k1-dev libmicrohttpd-dev libsodium-dev liblz4-dev libjemalloc-dev
+#sudo apt-get install -y build-essential git cmake ninja-build zlib1g-dev libsecp256k1-dev libmicrohttpd-dev libsodium-dev liblz4-dev libjemalloc-dev ccache
 
 with_tests=false
 with_artifacts=false
+with_ccache=false
 
 
-while getopts 'ta' flag; do
+while getopts 'tac' flag; do
   case "${flag}" in
     t) with_tests=true ;;
     a) with_artifacts=true ;;
+    c) with_ccache=true ;;
     *) break
        ;;
   esac
 done
+
+if [ "$with_ccache" = true ]; then
+  mkdir -p ~/.ccache
+  export CCACHE_DIR=~/.ccache
+  ccache -v
+  test $? -eq 0 || { echo "ccache not installed"; exit 1; }
+else
+  export CCACHE_DISABLE=1
+fi
 
 if [ ! -d "build" ]; then
   mkdir build
@@ -26,19 +37,19 @@ fi
 
 export CC=$(which clang-16)
 export CXX=$(which clang++-16)
-export CCACHE_DISABLE=1
 
-if [ ! -d "openssl_3" ]; then
-  git clone https://github.com/openssl/openssl openssl_3
-  cd openssl_3
+
+if [ ! -d "../openssl_3" ]; then
+  git clone https://github.com/openssl/openssl ../openssl_3
+  cd ../openssl_3
   opensslPath=`pwd`
   git checkout openssl-3.1.4
   ./config
   make build_libs -j12
   test $? -eq 0 || { echo "Can't compile openssl_3"; exit 1; }
-  cd ..
+  cd ../build
 else
-  opensslPath=$(pwd)/openssl_3
+  opensslPath=$(pwd)/../openssl_3
   echo "Using compiled openssl_3"
 fi
 
