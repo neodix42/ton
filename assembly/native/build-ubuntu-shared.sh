@@ -20,11 +20,11 @@ done
 
 if [ "$with_ccache" = true ]; then
   mkdir -p ~/.ccache
-  export CCACHE_DIR=~/.ccache
+  CCACHE_DIR=~/.ccache
   ccache -M 0
   test $? -eq 0 || { echo "ccache not installed"; exit 1; }
 else
-  export CCACHE_DISABLE=1
+  CCACHE_DISABLE=1
 fi
 
 if [ ! -d "build" ]; then
@@ -35,8 +35,8 @@ else
   rm -rf .ninja* CMakeCache.txt
 fi
 
-export CC=$(which clang-16)
-export CXX=$(which clang++-16)
+CC=$(which clang-16)
+CXX=$(which clang++-16)
 
 
 if [ ! -d "../openssl_3" ]; then
