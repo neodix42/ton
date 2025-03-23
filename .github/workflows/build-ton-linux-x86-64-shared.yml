@@ -47,12 +47,7 @@ jobs:
       uses: actions/cache@v4
       with:
         path: ~/.ccache
-        key: ${{ runner.os }}-${{ runner.arch }}-${{ matrix.os }}-ccache
-
-    - if: matrix.os == 'ubuntu-20.04'
-      name: Install gcc-11
-      run: |
-        rm -rf ~/.ccache/*
+        key: ${{ runner.os }}-${{ runner.arch }}-${{ matrix.os }}-shared-ccache
 
     - name: Build TON
       run: |

@@ -25,6 +25,8 @@ if [ "$with_ccache" = true ]; then
   test $? -eq 0 || { echo "ccache not installed"; exit 1; }
 else
   CCACHE_DISABLE=1
+  CCACHE_DIR=
+  rm -rf ~/.ccache
 fi
 
 if [ ! -d "build" ]; then
