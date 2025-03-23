@@ -24,7 +24,6 @@ if [ "$with_ccache" = true ]; then
   test $? -eq 0 || { echo "ccache not installed"; exit 1; }
 else
   export CCACHE_DISABLE=1
-  export CCACHE_DIR=
   rm -rf ~/.ccache
 fi
 
@@ -36,8 +35,8 @@ else
   rm -rf .ninja* CMakeCache.txt
 fi
 
-export CC=$(which clang)
-export CXX=$(which clang++)
+export CC=$(which clang-16)
+export CXX=$(which clang++-16)
 
 if [ ! -d "lz4" ]; then
 git clone https://github.com/lz4/lz4.git

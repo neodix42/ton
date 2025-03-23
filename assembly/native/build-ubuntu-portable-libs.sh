@@ -4,14 +4,25 @@
 #sudo apt-get install -y build-essential git cmake ninja-build automake libtool texinfo autoconf libc++-dev libc++abi-dev
 
 with_artifacts=false
+with_ccache=false
 
 while getopts 'ta' flag; do
   case "${flag}" in
     a) with_artifacts=true ;;
+    c) with_ccache=true ;;
     *) break
        ;;
   esac
 done
+
+if [ "$with_ccache" = true ]; then
+  mkdir -p ~/.ccache
+  export CCACHE_DIR=~/.ccache
+  ccache -M 0
+  test $? -eq 0 || { echo "ccache not installed"; exit 1; }
+else
+  export CCACHE_DISABLE=1
+fi
 
 if [ ! -d "build" ]; then
   mkdir build
@@ -21,9 +32,8 @@ else
   rm -rf .ninja* CMakeCache.txt
 fi
 
-export CC=$(which clang)
-export CXX=$(which clang++)
-export CCACHE_DISABLE=1
+export CC=$(which clang-16)
+export CXX=$(which clang++-16)
 
 if [ ! -d "lz4" ]; then
 git clone https://github.com/lz4/lz4.git
