@@ -23,6 +23,7 @@ jobs:
         mkdir ~/.ccache
 
     - if: matrix.os == 'ubuntu-20.04'
+      name: Install gcc-11
       run: |
         sudo apt install -y manpages-dev software-properties-common
         sudo add-apt-repository ppa:ubuntu-toolchain-r/test
