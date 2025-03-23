@@ -21,7 +21,7 @@ done
 if [ "$with_ccache" = true ]; then
   mkdir -p ~/.ccache
   export CCACHE_DIR=~/.ccache
-  ccache -v
+  ccache -M 0
   test $? -eq 0 || { echo "ccache not installed"; exit 1; }
 else
   export CCACHE_DISABLE=1
