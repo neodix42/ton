@@ -31,7 +31,7 @@ export PATH=/usr/local/opt/ccache/libexec:$PATH
 brew install llvm@16
 
 if [ "$with_ccache" = true ]; then
-  brew ccache
+  brew install ccache
   mkdir -p ~/.ccache
   export CCACHE_DIR=~/.ccache
   ccache -M 0
