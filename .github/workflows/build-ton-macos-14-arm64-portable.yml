@@ -12,9 +12,17 @@ jobs:
         with:
           submodules: 'recursive'
 
-      - name: Create ~/.ccache
+      - name: Create directories
         run: |
           mkdir -p ~/.ccache
+          mkdir -p 3pp
+
+      - name: Cache 3pp
+        id: cache-3pp
+        uses: actions/cache@v4
+        with:
+          path: 3pp
+          key: ${{ runner.os }}-${{ runner.arch }}-14-3pp
 
       - name: Cache TON test
         id: cache-ton
@@ -30,6 +38,12 @@ jobs:
           cp assembly/native/build-macos-portable.sh .
           chmod +x build-macos-portable.sh
           ./build-macos-portable.sh -t -a
+          ccache -s
+
+      - name: Run Tests
+        run: |
+          cd build        
+          ctest --output-on-failure --timeout 1800
 
       - name: Upload artifacts
         uses: actions/upload-artifact@master
