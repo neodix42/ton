@@ -6,7 +6,7 @@ with_ccache=false
 
 OSX_TARGET=11.0
 
-while getopts 'taoc:' flag; do
+while getopts 'taco:' flag; do
   case "${flag}" in
     t) with_tests=true ;;
     a) with_artifacts=true ;;
@@ -19,7 +19,7 @@ done
 
 if [ "$with_ccache" = true ]; then
   mkdir -p ~/.ccache
-  CCACHE_DIR=~/.ccache
+  export CCACHE_DIR=~/.ccache
   ccache -M 0
   test $? -eq 0 || { echo "ccache not installed"; exit 1; }
 else
@@ -36,6 +36,7 @@ fi
 
 export NONINTERACTIVE=1
 brew install ninja pkg-config automake libtool autoconf texinfo ccache
+export PATH=/usr/local/opt/ccache/libexec:$PATH
 brew install llvm@16
 
 

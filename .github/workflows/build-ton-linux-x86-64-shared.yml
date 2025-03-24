@@ -56,7 +56,7 @@ jobs:
         cp assembly/native/build-ubuntu-shared.sh .
         chmod +x build-ubuntu-shared.sh
         ./build-ubuntu-shared.sh -t
-        ccache -s
+        ccache -sp
 
     - name: Run Tests
       run: |

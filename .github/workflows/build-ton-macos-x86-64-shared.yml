@@ -30,7 +30,7 @@ jobs:
           cp assembly/native/build-macos-shared.sh .
           chmod +x build-macos-shared.sh
           ./build-macos-shared.sh -t -c
-          ccache -s
+          ccache -sp
 
       - name: Run Tests
         run: |

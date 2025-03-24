@@ -4,7 +4,7 @@ with_tests=false
 with_artifacts=false
 with_ccache=false
 
-while getopts 'ta' flag; do
+while getopts 'tac' flag; do
   case "${flag}" in
     t) with_tests=true ;;
     a) with_artifacts=true ;;
@@ -16,7 +16,7 @@ done
 
 if [ "$with_ccache" = true ]; then
   mkdir -p ~/.ccache
-  CCACHE_DIR=~/.ccache
+  export CCACHE_DIR=~/.ccache
   ccache -M 0
   test $? -eq 0 || { echo "ccache not installed"; exit 1; }
 else
