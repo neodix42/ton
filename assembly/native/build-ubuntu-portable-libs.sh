@@ -6,7 +6,7 @@
 with_artifacts=false
 with_ccache=false
 
-while getopts 'ta' flag; do
+while getopts 'tac' flag; do
   case "${flag}" in
     a) with_artifacts=true ;;
     c) with_ccache=true ;;
@@ -37,7 +37,7 @@ export CXX=$(which clang++-16)
 
 if [ ! -d "../3pp/lz4" ]; then
 mkdir -p ../3pp
-git clone https://github.com/lz4/lz4.git ../3pp/
+git clone https://github.com/lz4/lz4.git ../3pp/lz4
 cd ../3pp/lz4
 lz4Path=`pwd`
 git checkout v1.9.4

@@ -48,6 +48,7 @@ else
 fi
 
 if [ ! -d "../3pp/lz4" ]; then
+mkdir -p ../3pp
 git clone https://github.com/lz4/lz4.git ../3pp/lz4
 cd ../3pp/lz4
 lz4Path=`pwd`
@@ -79,7 +80,7 @@ else
 fi
 
 if [ ! -d "../3pp/openssl_3" ]; then
-  git clone https://github.com/openssl/openssl openssl_3 ../3pp/openssl_3
+  git clone https://github.com/openssl/openssl ../3pp/openssl_3
   cd ../3pp/openssl_3
   opensslPath=`pwd`
   git checkout openssl-3.1.4
@@ -106,7 +107,7 @@ else
 fi
 
 if [ ! -d "../3pp/libmicrohttpd" ]; then
-  git clone https://git.gnunet.org/libmicrohttpd.git
+  git clone https://git.gnunet.org/libmicrohttpd.git ../3pp/libmicrohttpd
   cd ../3pp/libmicrohttpd
   libmicrohttpdPath=`pwd`
   ./autogen.sh

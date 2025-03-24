@@ -37,7 +37,7 @@ jobs:
           git submodule update
           cp assembly/native/build-macos-portable.sh .
           chmod +x build-macos-portable.sh
-          ./build-macos-portable.sh -t -a
+          ./build-macos-portable.sh -t -a -c
           ccache -s
 
       - name: Run Tests
