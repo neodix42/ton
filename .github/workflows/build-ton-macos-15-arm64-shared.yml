@@ -16,7 +16,7 @@ jobs:
         run: |
           mkdir -p ~/.ccache
 
-      - name: Cache TON test
+      - name: Cache TON
         id: cache-ton
         uses: actions/cache@v4
         with:
