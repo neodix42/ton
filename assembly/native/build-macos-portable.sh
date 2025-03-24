@@ -109,7 +109,8 @@ else
 fi
 
 if [ ! -d "../3pp/libmicrohttpd" ]; then
-  git clone https://git.gnunet.org/libmicrohttpd.git ../3pp/libmicrohttpd
+  while true; do git clone https://git.gnunet.org/libmicrohttpd.git ../3pp/libmicrohttpd && break; echo wait; sleep 10; done
+
   cd ../3pp/libmicrohttpd
   libmicrohttpdPath=`pwd`
   ./autogen.sh
