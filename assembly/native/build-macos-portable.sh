@@ -17,15 +17,6 @@ while getopts 'taco:' flag; do
   esac
 done
 
-if [ "$with_ccache" = true ]; then
-  mkdir -p ~/.ccache
-  export CCACHE_DIR=~/.ccache
-  ccache -M 0
-  test $? -eq 0 || { echo "ccache not installed"; exit 1; }
-else
-  export CCACHE_DISABLE=1
-fi
-
 if [ ! -d "build" ]; then
   mkdir build
   cd build
@@ -35,9 +26,19 @@ else
 fi
 
 export NONINTERACTIVE=1
-brew install ninja pkg-config automake libtool autoconf texinfo ccache
+brew install ninja pkg-config automake libtool autoconf texinfo
 export PATH=/usr/local/opt/ccache/libexec:$PATH
 brew install llvm@16
+
+if [ "$with_ccache" = true ]; then
+  brew ccache
+  mkdir -p ~/.ccache
+  export CCACHE_DIR=~/.ccache
+  ccache -M 0
+  test $? -eq 0 || { echo "ccache not installed"; exit 1; }
+else
+  export CCACHE_DISABLE=1
+fi
 
 
 if [ -f /opt/homebrew/opt/llvm@16/bin/clang ]; then

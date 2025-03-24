@@ -39,6 +39,7 @@ jobs:
           copy assembly\native\build-windows-github-2019.bat .
           copy assembly\native\build-windows-2019.bat .
           build-windows-github-2019.bat Enterprise
+          ccache -sp
 
 #      - name: Run Tests
 #        run: |
