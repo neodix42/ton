@@ -35,7 +35,7 @@ else
 fi
 
 export NONINTERACTIVE=1
-brew install ninja pkg-config automake libtool autoconf texinfo
+brew install ninja pkg-config automake libtool autoconf texinfo ccache
 brew install llvm@16
 
 
