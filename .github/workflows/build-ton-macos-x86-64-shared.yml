@@ -21,7 +21,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.ccache
-          key: ${{ runner.os }}-${{ runner.arch }}-${{ matrix.os }}-13-shared-ccache
+          key: ${{ runner.os }}-${{ runner.arch }}-13-shared-ccache
 
       - name: Build TON
         run: |

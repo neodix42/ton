@@ -53,6 +53,7 @@ jobs:
         cp assembly/native/build-ubuntu-appimages.sh .
         chmod +x build-ubuntu-appimages.sh
         ./build-ubuntu-appimages.sh -a -c
+        ccache -s
 
     - name: Make AppImages
       run: |

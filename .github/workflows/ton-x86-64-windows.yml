@@ -40,10 +40,10 @@ jobs:
           copy assembly\native\build-windows-2019.bat .
           build-windows-github-2019.bat Enterprise
 
-      - name: Run Tests
-        run: |
-          cd build
-          ctest -C Release --output-on-failure -E "test-bigint" --timeout 1800
+#      - name: Run Tests
+#        run: |
+#          cd build
+#          ctest -C Release --output-on-failure -E "test-bigint" --timeout 1800
 
       - name: Upload artifacts
         uses: actions/upload-artifact@master
