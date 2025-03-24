@@ -17,7 +17,7 @@ done
 
 if [ "$with_ccache" = true ]; then
   mkdir -p ~/.ccache
-  export CCACHE_DIR=~/.ccache
+  CCACHE_DIR=~/.ccache
   ccache -M 0
   test $? -eq 0 || { echo "ccache not installed"; exit 1; }
 else
@@ -45,7 +45,7 @@ CFLAGS="-fPIC" make -j12
 test $? -eq 0 || { echo "Can't compile lz4"; exit 1; }
 cd ../../build
 else
-  lz4Path=$(pwd)/lz4
+  lz4Path=$(pwd)/../3pp/lz4
   echo "Using compiled lz4"
 fi
 
@@ -61,7 +61,7 @@ if [ ! -d "../3pp/libsodium" ]; then
   test $? -eq 0 || { echo "Can't compile libsodium"; exit 1; }
   cd ../../build
 else
-  sodiumPath=$(pwd)/libsodium
+  sodiumPath=$(pwd)/../3pp/libsodium
   echo "Using compiled libsodium"
 fi
 
@@ -75,7 +75,7 @@ if [ ! -d "../3pp/openssl_3" ]; then
   test $? -eq 0 || { echo "Can't compile openssl_3"; exit 1; }
   cd ../../build
 else
-  opensslPath=$(pwd)/openssl_3
+  opensslPath=$(pwd)/../3pp/openssl_3
   echo "Using compiled openssl_3"
 fi
 
@@ -88,7 +88,7 @@ if [ ! -d "../3pp/zlib" ]; then
   test $? -eq 0 || { echo "Can't compile zlib"; exit 1; }
   cd ../../build
 else
-  zlibPath=$(pwd)/zlib
+  zlibPath=$(pwd)/../3pp/zlib
   echo "Using compiled zlib"
 fi
 
@@ -102,7 +102,7 @@ if [ ! -d "../3pp/libmicrohttpd" ]; then
   test $? -eq 0 || { echo "Can't compile libmicrohttpd"; exit 1; }
   cd ../../build
 else
-  libmicrohttpdPath=$(pwd)/libmicrohttpd
+  libmicrohttpdPath=$(pwd)/../3pp/libmicrohttpd
   echo "Using compiled libmicrohttpd"
 fi
 

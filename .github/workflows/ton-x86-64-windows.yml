@@ -21,7 +21,7 @@ jobs:
         with:
           submodules: 'recursive'
 
-      - name: Craete directories
+      - name: Create directories
         run: |
           mkdir third_libs
 
