@@ -16,6 +16,12 @@ jobs:
       with:      
         submodules: 'recursive'
 
+    - name: Date Stamp
+      shell: bash
+      id: date-stamp
+      run: |
+        echo "timestamp=$(date -u "+%Y%m%d%H%M_%S")" >> "$GITHUB_OUTPUT"
+
     - name: Install system libraries
       run: |
         sudo apt-get update
@@ -41,7 +47,8 @@ jobs:
       uses: actions/cache@v4
       with:
         path: ~/.ccache
-        key: ${{ runner.os }}-${{ runner.arch }}-${{ matrix.os }}-shared-ccache
+        key: ${{ runner.os }}-${{ runner.arch }}-${{ matrix.os }}-shared-ccache-${{ steps.date-stamp.outputs.timestamp }}
+        restore-keys: ${{ runner.os }}-${{ runner.arch }}-${{ matrix.os }}-shared-ccache
 
     - name: Build TON
       run: |

@@ -12,6 +12,12 @@ jobs:
         with:
           submodules: 'recursive'
 
+      - name: Date Stamp
+        shell: bash
+        id: date-stamp
+        run: |
+          echo "timestamp=$(date -u "+%Y%m%d%H%M_%S")" >> "$GITHUB_OUTPUT"
+
       - name: Create ~/.ccache
         run: |
           mkdir -p ~/.ccache
@@ -21,7 +27,8 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.ccache
-          key: ${{ runner.os }}-${{ runner.arch }}-14-shared-ccache
+          key: ${{ runner.os }}-${{ runner.arch }}-14-shared-ccache-${{ steps.date-stamp.outputs.timestamp }}
+          restore-keys: ${{ runner.os }}-${{ runner.arch }}-14-shared-ccache
 
       - name: Build TON
         run: |
