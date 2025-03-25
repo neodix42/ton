@@ -88,6 +88,7 @@ ldd ./validator-engine/validator-engine || exit 1
 
 cd ..
 
+
 if [ "$with_artifacts" = true ]; then
   rm -rf artifacts
   mkdir artifacts
