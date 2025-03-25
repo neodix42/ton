@@ -42,9 +42,9 @@ jobs:
         path: openssl_3
         key: ${{ runner.os }}-${{ runner.arch }}-${{ matrix.os }}-openssl_3
 
-    - name: Cache TON
+    - name: Restore cache TON
       id: cache-ton
-      uses: actions/cache@v4
+      uses: actions/cache/restore@v4
       with:
         path: ~/.ccache
         key: ${{ runner.os }}-${{ runner.arch }}-${{ matrix.os }}-shared-ccache
@@ -57,6 +57,13 @@ jobs:
         chmod +x build-ubuntu-shared.sh
         ./build-ubuntu-shared.sh -t -c
         ccache -sp
+
+    - name: Save cache TON
+      id: cache-ton
+      uses: actions/cache/save@v4
+      with:
+        path: ~/.ccache
+        key: ${{ runner.os }}-${{ runner.arch }}-${{ matrix.os }}-shared-ccache
 
     - name: Run Tests
       run: |

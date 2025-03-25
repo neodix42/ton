@@ -75,7 +75,7 @@ jobs:
       run: |
         cp assembly/native/build-ubuntu-portable-libs.sh .
         chmod +x build-ubuntu-portable-libs.sh
-        ./build-ubuntu-portable-libs.sh -a
+        ./build-ubuntu-portable-libs.sh -a -c
         cp ./artifacts/libtonlibjson.so appimages/artifacts/
         cp ./artifacts/libemulator.so appimages/artifacts/
 
