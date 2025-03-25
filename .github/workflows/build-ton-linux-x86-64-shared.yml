@@ -48,7 +48,7 @@ jobs:
         path: openssl_3
         key: ${{ runner.os }}-${{ runner.arch }}-${{ matrix.os }}-openssl_3
 
-    - name: Restore cache TON
+    - name: Restore cache TON test
       uses: actions/cache@v4
       with:
         path: ~/.ccache
