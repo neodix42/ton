@@ -43,7 +43,6 @@ jobs:
         key: ${{ runner.os }}-${{ runner.arch }}-${{ matrix.os }}-openssl_3
 
     - name: Restore cache TON
-      id: cache-ton
       uses: actions/cache/restore@v4
       with:
         path: ~/.ccache
@@ -59,7 +58,6 @@ jobs:
         ccache -sp
 
     - name: Save cache TON
-      id: cache-ton
       uses: actions/cache/save@v4
       with:
         path: ~/.ccache
