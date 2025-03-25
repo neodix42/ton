@@ -2,10 +2,6 @@ name: Ubuntu TON build (shared, x86-64)
 
 on: [push,workflow_dispatch,workflow_call]
 
-permissions:
-  contents: write
-  issues: write
-
 jobs:
   build:
     strategy:
@@ -63,6 +59,7 @@ jobs:
 
     - name: Save cache TON
       uses: actions/cache/save@v4
+      if: ${{ github.event_name != 'pull_request' }}
       with:
         path: ~/.ccache
         key: ${{ runner.os }}-${{ runner.arch }}-${{ matrix.os }}-shared-ccache

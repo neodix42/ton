@@ -45,9 +45,8 @@ jobs:
         path: openssl_3
         key: ${{ runner.os }}-${{ runner.arch }}-ubuntu-20.04-openssl_3
 
-    - name: Cache TON
-      id: cache-ton
-      uses: actions/cache@v4
+    - name: Restore cache TON
+      uses: actions/cache/restore@v4
       with:
         path: ~/.ccache
         key: ${{ runner.os }}-${{ runner.arch }}-ubuntu-20.04-portable-ccache
@@ -61,6 +60,13 @@ jobs:
         ./build-ubuntu-appimages.sh -a -c
         ccache -sp
 
+    - name: Save cache TON
+      uses: actions/cache/save@v4
+      if: ${{ github.event_name != 'pull_request' }}
+      with:
+        path: ~/.ccache
+        key: ${{ runner.os }}-${{ runner.arch }}-ubuntu-20.04-portable-ccache
+
     - name: Make AppImages
       run: |
         cp assembly/appimage/create-appimages.sh .
@@ -71,6 +77,12 @@ jobs:
         rm -rf artifacts
 
 
+    - name: Restore cache TON libs
+      uses: actions/cache/restore@v4
+      with:
+        path: ~/.ccache
+        key: ${{ runner.os }}-${{ runner.arch }}-ubuntu-20.04-portable-libs-ccache
+
     - name: Build TON libs
       run: |
         cp assembly/native/build-ubuntu-portable-libs.sh .
@@ -78,6 +90,13 @@ jobs:
         ./build-ubuntu-portable-libs.sh -a -c
         cp ./artifacts/libtonlibjson.so appimages/artifacts/
         cp ./artifacts/libemulator.so appimages/artifacts/
+
+    - name: Save cache TON libs
+      uses: actions/cache/save@v4
+      if: ${{ github.event_name != 'pull_request' }}
+      with:
+        path: ~/.ccache
+        key: ${{ runner.os }}-${{ runner.arch }}-ubuntu-20.04-portable-libs-ccache
 
     - name: Upload artifacts
       uses: actions/upload-artifact@master
