@@ -12,6 +12,12 @@ jobs:
       with:      
         submodules: 'recursive'
 
+    - name: Date Stamp
+      shell: bash
+      id: date-stamp
+      run: |
+        echo "timestamp=$(date -u "+%Y%m%d%H%M_%S")" >> "$GITHUB_OUTPUT"
+
     - name: Install system libraries
       run: |
         sudo apt update
@@ -78,10 +84,11 @@ jobs:
 
 
     - name: Restore cache TON libs
-      uses: actions/cache/restore@v4
+      uses: actions/cache@v4
       with:
         path: ~/.ccache
-        key: ${{ runner.os }}-${{ runner.arch }}-ubuntu-20.04-portable-libs-ccache
+        key: ${{ runner.os }}-${{ runner.arch }}-ubuntu-20.04-portable-libs-ccache-${{ steps.date-stamp.outputs.timestamp }}
+        restore-keys: ${{ runner.os }}-${{ runner.arch }}-ubuntu-20.04-portable-libs-ccache
 
     - name: Build TON libs
       run: |
@@ -90,13 +97,6 @@ jobs:
         ./build-ubuntu-portable-libs.sh -a -c
         cp ./artifacts/libtonlibjson.so appimages/artifacts/
         cp ./artifacts/libemulator.so appimages/artifacts/
-
-    - name: Save cache TON libs
-      uses: actions/cache/save@v4
-      if: ${{ github.event_name != 'pull_request' }}
-      with:
-        path: ~/.ccache
-        key: ${{ runner.os }}-${{ runner.arch }}-ubuntu-20.04-portable-libs-ccache
 
     - name: Upload artifacts
       uses: actions/upload-artifact@master
