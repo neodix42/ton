@@ -55,7 +55,7 @@ jobs:
         key: ${{ runner.os }}-${{ runner.arch }}-${{ matrix.os }}-shared-ccache-${{ steps.date-stamp.outputs.timestamp }}
         restore-keys: ${{ runner.os }}-${{ runner.arch }}-${{ matrix.os }}-shared-ccache
 
-    - name: Build TON
+    - name: Build TON test
       run: |
         git submodule sync --recursive
         git submodule update
