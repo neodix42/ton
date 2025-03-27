@@ -28,7 +28,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: 3pp
-          key: ${{ runner.os }}-${{ runner.arch }}-13-3pp
+          key: ${{ runner.os }}-${{ runner.arch }}-13-3pp-${{ hashFiles('**/assembly/native/build-macos-portable.sh') }}
 
       - name: Cache TON test
         id: cache-ton

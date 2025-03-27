@@ -40,7 +40,7 @@ jobs:
       uses: actions/cache@v4
       with:
         path: openssl_3
-        key: ${{ runner.os }}-${{ runner.arch }}-${{ matrix.os }}-openssl_3
+        key: ${{ runner.os }}-${{ runner.arch }}-${{ matrix.os }}-openssl_3-${{ hashFiles('**/assembly/native/build-ubuntu-shared.sh') }}
 
     - name: Cache TON test
       id: cache-ton

@@ -30,7 +30,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: third_libs
-          key: ${{ runner.os }}-${{ runner.arch }}-windows-2019-3pp
+          key: ${{ runner.os }}-${{ runner.arch }}-windows-2019-3pp-${{ hashFiles('**/assembly/native/build-windows-2019.bat') }}
 
       - name: Build TON
         run: |

@@ -36,14 +36,14 @@ jobs:
       uses: actions/cache@v4
       with:
         path: 3pp
-        key: ${{ runner.os }}-${{ runner.arch }}-ubuntu-20.04-arm-3pp
+        key: ${{ runner.os }}-${{ runner.arch }}-ubuntu-20.04-arm-3pp-${{ hashFiles('**/assembly/native/build-ubuntu-appimages.sh') }}
 
     - name: Cache OpenSSL
       id: cache-openssl
       uses: actions/cache@v4
       with:
         path: openssl_3
-        key: ${{ runner.os }}-${{ runner.arch }}-ubuntu-20.04-arm-openssl_3
+        key: ${{ runner.os }}-${{ runner.arch }}-ubuntu-20.04-arm-openssl_3-${{ hashFiles('**/assembly/native/build-ubuntu-appimages.sh') }}
 
     - name: Cache TON
       id: cache-ton
@@ -71,6 +71,12 @@ jobs:
         ./create-appimages.sh aarch64
         rm -rf artifacts
 
+    - name: Restore cache TON libs
+      uses: actions/cache@v4
+      with:
+        path: ~/.ccache
+        key: ${{ runner.os }}-${{ runner.arch }}-ubuntu-20.04-arm-portable-libs-ccache-${{ steps.date-stamp.outputs.timestamp }}
+        restore-keys: ${{ runner.os }}-${{ runner.arch }}-ubuntu-20.04-arm-portable-libs-ccache
 
     - name: Build TON libs
       run: |
