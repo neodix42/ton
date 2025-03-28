@@ -132,7 +132,6 @@ cmake -GNinja .. \
 -DLZ4_INCLUDE_DIRS=$lz4Path/lib \
 -DLZ4_LIBRARIES=$lz4Path/lib/liblz4.a
 
-
 test $? -eq 0 || { echo "Can't configure ton"; exit 1; }
 
 if [ "$with_tests" = true ]; then
