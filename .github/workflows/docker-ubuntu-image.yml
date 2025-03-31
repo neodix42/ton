@@ -101,6 +101,9 @@ jobs:
       - build-amd64
       - build-arm64
     steps:
+      - name: Check out repository
+        uses: actions/checkout@v3
+
       - name: Get next tag
         id: tag
         run: |
