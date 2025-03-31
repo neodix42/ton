@@ -51,7 +51,7 @@ jobs:
           platforms: linux/arm64
           push: true
           context: ./
-          tags:  ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.tag.outputs.TAG }}-amd64
+          tags:  ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.tag.outputs.TAG }}-arm64
 
   build-amd64:
     runs-on: ubuntu-22.04
