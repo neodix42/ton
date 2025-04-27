@@ -811,6 +811,10 @@ class DynamicBagOfCellsDbImplV2 : public DynamicBagOfCellsDb {
   td::Result<Ref<DataCell>> load_root(td::Slice hash) override {
     return load_cell(hash);
   }
+  td::Result<std::vector<Ref<DataCell>>> load_bulk(td::Span<td::Slice> hashes) override {
+    CHECK(cell_db_reader_);
+    return cell_db_reader_->load_bulk(hashes);
+  }
   td::Result<Ref<DataCell>> load_root_thread_safe(td::Slice hash) const override {
     // TODO: it is better to use AtomicRef, or atomic shared pointer
     // But to use AtomicRef we need a little refactoring
@@ -1004,7 +1008,7 @@ class DynamicBagOfCellsDbImplV2 : public DynamicBagOfCellsDb {
   }
 
   void set_celldb_compress_depth(td::uint32 value) override {
-    CHECK(value == 0);
+    celldb_compress_depth_ = value;
   }
 
   vm::ExtCellCreator &as_ext_cell_creator() override {
@@ -1100,6 +1104,20 @@ class DynamicBagOfCellsDbImplV2 : public DynamicBagOfCellsDb {
         return maybe_cell;
       }
       return load_cell_slow_path(hash);
+    }
+
+    td::Result<std::vector<Ref<DataCell>>> load_bulk(td::Span<td::Slice> hashes) override {
+      // thread safe function
+      std::vector<Ref<DataCell>> result;
+      result.reserve(hashes.size());
+      for (auto &hash : hashes) {
+        auto maybe_cell = load_cell(hash);
+        if (maybe_cell.is_error()) {
+          return maybe_cell.move_as_error();
+        }
+        result.push_back(maybe_cell.move_as_ok());
+      }
+      return result;
     }
 
     td::Result<Ref<DataCell>> load_ext_cell(Ref<DynamicBocExtCell> ext_cell) override {
@@ -1232,6 +1250,7 @@ class DynamicBagOfCellsDbImplV2 : public DynamicBagOfCellsDb {
   };
 
   CreateV2Options options_;
+  td::int32 celldb_compress_depth_{0};
   std::vector<Ref<Cell>> to_inc_;
   std::vector<Ref<Cell>> to_dec_;
   std::vector<std::vector<CellStorer::Diff>> diff_chunks_;
@@ -1398,6 +1417,7 @@ class DynamicBagOfCellsDbImplV2 : public DynamicBagOfCellsDb {
       stats_.diff_zero.inc();
       return;
     }
+    auto should_compress = celldb_compress_depth_ != 0 && info->cell->get_depth() == celldb_compress_depth_;
 
     bool merge_supported = true;
     if (merge_supported) {
@@ -1425,7 +1445,7 @@ class DynamicBagOfCellsDbImplV2 : public DynamicBagOfCellsDb {
           stats_.diff_full.inc();
           worker.add_result({.type = CellStorer::Diff::Set,
                              .key = info->cell->get_hash(),
-                             .value = CellStorer::serialize_value(ref_cnt_diff + state.db_ref_cnt, data_cell, false)});
+                             .value = CellStorer::serialize_value(ref_cnt_diff + state.db_ref_cnt, data_cell, should_compress)});
         } else {
           stats_.diff_ref_cnt.inc();
           worker.add_result({.type = CellStorer::Diff::Merge,
@@ -1461,7 +1481,7 @@ class DynamicBagOfCellsDbImplV2 : public DynamicBagOfCellsDb {
         worker.add_result(
             {.type = CellStorer::Diff::Set,
              .key = info->cell->get_hash(),
-             .value = CellStorer::serialize_value(new_ref_cnt, info->cell->load_cell().move_as_ok().data_cell, false)});
+             .value = CellStorer::serialize_value(new_ref_cnt, info->cell->load_cell().move_as_ok().data_cell, should_compress)});
         stats_.dec_save_full.inc();
       }
     } else {
@@ -1478,7 +1498,7 @@ class DynamicBagOfCellsDbImplV2 : public DynamicBagOfCellsDb {
       worker.add_result(
           {.type = CellStorer::Diff::Set,
            .key = info->cell->get_hash(),
-           .value = CellStorer::serialize_value(new_ref_cnt, info->cell->load_cell().move_as_ok().data_cell, false)});
+           .value = CellStorer::serialize_value(new_ref_cnt, info->cell->load_cell().move_as_ok().data_cell, should_compress)});
       stats_.inc_save_full.inc();
     }
   }
