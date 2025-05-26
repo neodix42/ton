@@ -6,6 +6,8 @@
 #include "block/block-auto.h"
 #include "block/block-parse.h"
 #include "block/mc-config.h"
+#include "emulator-log-interface.h"
+#include <memory>
 
 namespace emulator {
 class TransactionEmulator {
@@ -18,6 +20,7 @@ class TransactionEmulator {
   bool ignore_chksig_;
   bool debug_enabled_;
   td::Ref<vm::Tuple> prev_blocks_info_;
+  std::unique_ptr<EmulatorLogContext> log_context_;
 
 public:
   TransactionEmulator(std::shared_ptr<block::Config> config, int vm_log_verbosity = 0) :
@@ -82,6 +85,12 @@ public:
   void set_libs(vm::Dictionary &&libs);
   void set_debug_enabled(bool debug_enabled);
   void set_prev_blocks_info(td::Ref<vm::Tuple> prev_blocks_info);
+  
+  void set_vm_verbosity_level(int vm_log_verbosity) {
+    vm_log_verbosity_ = vm_log_verbosity;
+    // Set up emulator-specific logging context to filter debug messages
+    log_context_ = std::make_unique<EmulatorLogContext>(vm_log_verbosity);
+  }
 
 private:
   bool check_state_update(const block::Account& account, const block::gen::Transaction::Record& trans);

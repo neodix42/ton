@@ -1,10 +1,13 @@
 #pragma once
 #include "smc-envelope/SmartContract.h"
+#include "emulator-log-interface.h"
+#include <memory>
 
 namespace emulator {
 class TvmEmulator {
   ton::SmartContract smc_;
   ton::SmartContract::Args args_;
+  std::unique_ptr<EmulatorLogContext> log_context_;
 public:
   using Answer = ton::SmartContract::Answer;
 
@@ -13,6 +16,13 @@ public:
 
   void set_vm_verbosity_level(int vm_log_verbosity) {
     args_.set_vm_verbosity_level(vm_log_verbosity);
+    // Set up emulator-specific logging context to filter debug messages
+    log_context_ = std::make_unique<EmulatorLogContext>(vm_log_verbosity);
+  }
+
+  // Get the current verbosity level for use in other functions
+  int get_vm_verbosity_level() const {
+    return log_context_ ? (log_context_->get_verbosity_level()) : 1;
   }
 
   void set_libraries(vm::Dictionary&& libraries) {

@@ -95,7 +95,10 @@ void *transaction_emulator_create(const char *config_params_boc, int vm_log_verb
     return nullptr;
   }
   auto global_config = std::make_shared<block::Config>(global_config_res.move_as_ok());
-  return new emulator::TransactionEmulator(std::move(global_config), vm_log_verbosity);
+  auto emulator = new emulator::TransactionEmulator(std::move(global_config), vm_log_verbosity);
+  // Set up emulator-specific logging context to filter debug messages
+  emulator->set_vm_verbosity_level(vm_log_verbosity);
+  return emulator;
 }
 
 void *emulator_config_create(const char *config_params_boc) {
@@ -678,6 +681,9 @@ const char *tvm_emulator_emulate_run_method(uint32_t len, const char *params_boc
     return nullptr;
   }
 
+  // Set global verbosity level to suppress debug messages
+  SET_VERBOSITY_LEVEL(VERBOSITY_NAME(ERROR));  // Only show ERROR and FATAL
+  
   auto emulator = new emulator::TvmEmulator(code, data);
   emulator->set_vm_verbosity_level(0);
   emulator->set_gas_limit(gas_limit);
