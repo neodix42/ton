@@ -83,6 +83,12 @@ td::Result<block::Config> decode_config(const char* config_boc) {
 }
 
 void *transaction_emulator_create(const char *config_params_boc, int vm_log_verbosity) {
+  // Set global logging level based on vm_log_verbosity to suppress debug messages when verbosity is 0
+  if (vm_log_verbosity == 0) {
+    SET_VERBOSITY_LEVEL(VERBOSITY_NAME(FATAL)); // Suppress DEBUG messages
+  } else {
+    SET_VERBOSITY_LEVEL(VERBOSITY_NAME(DEBUG)); // Allow DEBUG messages
+  }
   auto global_config_res = decode_config(config_params_boc);
   if (global_config_res.is_error()) {
     LOG(ERROR) << global_config_res.move_as_error().message();
@@ -423,6 +429,13 @@ bool emulator_set_verbosity_level(int verbosity_level) {
 }
 
 void *tvm_emulator_create(const char *code, const char *data, int vm_log_verbosity) {
+  // Set global logging level based on vm_log_verbosity to suppress debug messages when verbosity is 0
+  if (vm_log_verbosity == 0) {
+    SET_VERBOSITY_LEVEL(VERBOSITY_NAME(FATAL)); // Suppress DEBUG messages
+  } else {
+    SET_VERBOSITY_LEVEL(VERBOSITY_NAME(DEBUG)); // Allow DEBUG messages
+  }
+  
   auto code_cell = boc_b64_to_cell(code);
   if (code_cell.is_error()) {
     LOG(ERROR) << "Can't deserialize code boc: " << code_cell.move_as_error();
