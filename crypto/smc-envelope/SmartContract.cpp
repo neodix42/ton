@@ -17,6 +17,7 @@
     Copyright 2017-2020 Telegram Systems LLP
 */
 #include "SmartContract.h"
+#include "SmartContract-log-wrapper.h"
 
 #include "GenericAccount.h"
 #include "transaction.h"
@@ -195,6 +196,9 @@ SmartContract::Answer run_smartcont(SmartContract::State state, td::Ref<vm::Stac
                                     vm::GasLimits gas, bool ignore_chksig, td::Ref<vm::Cell> libraries,
                                     int vm_log_verbosity, bool debug_enabled,
                                     std::shared_ptr<const block::Config> config) {
+  // Create a log context to suppress debug messages when verbosity is 0
+  auto log_context = SmartContractLogWrapper::create(vm_log_verbosity);
+  
   auto gas_credit = gas.gas_credit;
   vm::init_vm(debug_enabled).ensure();
   vm::DictionaryBase::get_empty_dictionary();

@@ -26,6 +26,7 @@
     Copyright 2017-2020 Telegram Systems LLP
 */
 #include "mc-config.h"
+#include "mc-config-log-wrapper.h"
 #include "block/block.h"
 #include "block/block-parse.h"
 #include "block/block-auto.h"
@@ -249,6 +250,9 @@ td::Status Config::unpack(Ref<vm::CellSlice> config_cs) {
 }
 
 td::Status Config::unpack() {
+  // Create a log context to suppress debug messages during config unpacking
+  auto log_context = McConfigLogWrapper::create(0);
+  
   if (config_root.is_null()) {
     return td::Status::Error("configuration root not set");
   }

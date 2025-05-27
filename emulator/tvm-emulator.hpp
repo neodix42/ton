@@ -11,8 +11,15 @@ public:
   TvmEmulator(td::Ref<vm::Cell> code, td::Ref<vm::Cell> data): smc_({code, data}) {
   }
 
+  int vm_verbosity_level_{0};
+
   void set_vm_verbosity_level(int vm_log_verbosity) {
+    vm_verbosity_level_ = vm_log_verbosity;
     args_.set_vm_verbosity_level(vm_log_verbosity);
+  }
+
+  int get_vm_verbosity_level() const {
+    return vm_verbosity_level_;
   }
 
   void set_libraries(vm::Dictionary&& libraries) {

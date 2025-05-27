@@ -6,7 +6,7 @@ set(EMULATOR_STATIC_SOURCE
 )
 
 set(EMULATOR_SOURCE
-  emulator-extern.cpp
+  emulator-extern-fixed.cpp
 )
 
 set(EMULATOR_EMSCRIPTEN_SOURCE
@@ -24,11 +24,27 @@ else()
   add_library(emulator SHARED ${EMULATOR_SOURCE})
 endif()
 
-if (PORTABLE AND NOT APPLE)
-  target_link_libraries(emulator PUBLIC emulator_static git -static-libgcc -static-libstdc++)
-else()
-  target_link_libraries(emulator PUBLIC emulator_static git)
+# For shared library builds, ensure all symbols from static libs are included
+if (NOT EMULATOR_STATIC AND NOT USE_EMSCRIPTEN)
+  # Add linker flags to handle symbol resolution properly without causing duplicate symbols
+  set_target_properties(emulator PROPERTIES
+    LINK_FLAGS "-Wl,--no-undefined -Wl,--no-allow-shlib-undefined -Wl,--export-dynamic"
+  )
+  
+  # Ensure proper symbol visibility control
+  set_target_properties(emulator PROPERTIES
+    CXX_VISIBILITY_PRESET default
+    VISIBILITY_INLINES_HIDDEN OFF
+  )
+  
+  # Force export of logging symbols to ensure singleton is properly shared
+  target_compile_definitions(emulator PRIVATE -DTD_UTILS_LOGGING_EXPORT)
+  
+  # Make sure we link directly against tdutils to ensure proper symbol resolution
+  target_link_libraries(emulator PUBLIC tdutils)
 endif()
+
+target_link_libraries(emulator PUBLIC emulator_static git)
 
 if (APPLE)
   set(CMAKE_MACOSX_RPATH ON)
