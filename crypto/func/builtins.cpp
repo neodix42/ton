@@ -264,7 +264,7 @@ int emulate_lshift(int a, int b) {
   }
   int t = ((b & VarDescr::_NonZero) ? VarDescr::_Even : 0);
   t |= b & VarDescr::_Finite;
-  return emulate_mul(a, VarDescr::_Int | VarDescr::_Pos | VarDescr::_NonZero | VarDescr::_Even | t);
+  return emulate_mul(a, VarDescr::_Int | VarDescr::_Pos | VarDescr::_NonZero | t);
 }
 
 int emulate_div(int a, int b) {
@@ -310,7 +310,7 @@ int emulate_rshift(int a, int b) {
   }
   int t = ((b & VarDescr::_NonZero) ? VarDescr::_Even : 0);
   t |= b & VarDescr::_Finite;
-  return emulate_div(a, VarDescr::_Int | VarDescr::_Pos | VarDescr::_NonZero | VarDescr::_Even | t);
+  return emulate_div(a, VarDescr::_Int | VarDescr::_Pos | VarDescr::_NonZero | t);
 }
 
 int emulate_mod(int a, int b, int round_mode = -1) {
@@ -1004,7 +1004,7 @@ AsmOp compile_cond_throw(std::vector<VarDescr>& res, std::vector<VarDescr>& args
 
 AsmOp compile_throw_arg(std::vector<VarDescr>& res, std::vector<VarDescr>& args, const SrcLocation&) {
   func_assert(res.empty() && args.size() == 2);
-  VarDescr &x = args[1];
+  VarDescr& x = args[1];
   if (x.is_int_const() && x.int_const->unsigned_fits_bits(11)) {
     x.unused();
     return exec_arg_op("THROWARG", x.int_const, 1, 0);

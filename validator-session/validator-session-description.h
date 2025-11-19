@@ -19,16 +19,15 @@
 #pragma once
 
 #include <vector>
-#include "crypto/common/refcnt.hpp"
-#include "crypto/common/refint.h"
-
-#include "td/utils/int_types.h"
 
 #include "adnl/utils.hpp"
+#include "catchain/catchain.h"
+#include "crypto/common/refcnt.hpp"
+#include "crypto/common/refint.h"
+#include "td/utils/int_types.h"
 #include "ton/ton-types.h"
 
 #include "validator-session-types.h"
-#include "catchain/catchain.h"
 
 namespace ton {
 
@@ -85,6 +84,7 @@ class ValidatorSessionDescription {
   virtual ValidatorWeight get_total_weight() const = 0;
   virtual td::int32 get_node_priority(td::uint32 src_idx, td::uint32 round) const = 0;
   virtual td::uint32 get_max_priority() const = 0;
+  virtual td::uint32 get_node_by_priority(td::uint32 round, td::uint32 priority) const = 0;
   virtual td::uint32 get_unixtime(td::uint64 t) const = 0;
   virtual td::uint32 get_attempt_seqno(td::uint64 t) const = 0;
   virtual td::uint32 get_self_idx() const = 0;

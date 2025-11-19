@@ -16,14 +16,15 @@
 
     Copyright 2017-2020 Telegram Systems LLP
 */
-#include "get-next-key-blocks.hpp"
-#include "download-proof.hpp"
-#include "ton/ton-tl.hpp"
 #include "adnl/utils.hpp"
-#include "ton/ton-shard.h"
 #include "td/utils/overloaded.h"
 #include "ton/ton-io.hpp"
+#include "ton/ton-shard.h"
+#include "ton/ton-tl.hpp"
+
+#include "download-proof.hpp"
 #include "full-node.h"
+#include "get-next-key-blocks.hpp"
 
 namespace ton {
 
@@ -84,7 +85,7 @@ void GetNextKeyBlocks::finish_query() {
 void GetNextKeyBlocks::start_up() {
   alarm_timestamp() = timeout_;
 
-  auto P = td::PromiseCreator::lambda([SelfId = actor_id(this)](td::Result<std::unique_ptr<DownloadToken>> R) {
+  auto P = td::PromiseCreator::lambda([SelfId = actor_id(this)](td::Result<std::unique_ptr<ActionToken>> R) {
     if (R.is_error()) {
       td::actor::send_closure(SelfId, &GetNextKeyBlocks::abort_query,
                               R.move_as_error_prefix("failed to get download token: "));
@@ -96,7 +97,7 @@ void GetNextKeyBlocks::start_up() {
                           std::move(P));
 }
 
-void GetNextKeyBlocks::got_download_token(std::unique_ptr<DownloadToken> token) {
+void GetNextKeyBlocks::got_download_token(std::unique_ptr<ActionToken> token) {
   token_ = std::move(token);
 
   if (download_from_.is_zero() && client_.empty()) {

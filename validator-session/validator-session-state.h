@@ -18,24 +18,24 @@
 */
 #pragma once
 
-#include "td/utils/int_types.h"
-#include "td/utils/buffer.h"
+#include <limits>
+
 #include "adnl/utils.hpp"
 #include "common/io.hpp"
+#include "td/utils/buffer.h"
+#include "td/utils/int_types.h"
 
 #include "persistent-vector.h"
 #include "validator-session-description.h"
-#include "validator-session-types.h"
 #include "validator-session-round-attempt-state.h"
-
-#include <limits>
+#include "validator-session-types.h"
 
 namespace td {
 
 td::StringBuilder& operator<<(td::StringBuilder& sb, const ton::ton_api::validatorSession_round_Message& message);
 td::StringBuilder& operator<<(td::StringBuilder& sb, const ton::ton_api::validatorSession_round_Message* message);
 
-}
+}  // namespace td
 
 namespace ton {
 
@@ -177,7 +177,6 @@ class ValidatorSessionOldRoundState : public ValidatorSessionDescription::RootOb
   const SessionBlockCandidateSignatureVector* approve_signatures_;
   const HashType hash_;
 };
-
 
 class ValidatorSessionRoundState : public ValidatorSessionDescription::RootObject {
  public:
@@ -376,6 +375,15 @@ class ValidatorSessionRoundState : public ValidatorSessionDescription::RootObjec
   void dump(ValidatorSessionDescription& desc, td::StringBuilder& sb, td::uint32 att) const;
   void dump_cur_attempt(ValidatorSessionDescription& desc, td::StringBuilder& sb) const;
 
+  void for_each_sent_block(std::function<void(const SessionBlockCandidate*)> foo) const {
+    if (!sent_blocks_) {
+      return;
+    }
+    for (td::uint32 i = 0; i < sent_blocks_->size(); ++i) {
+      foo(sent_blocks_->at(i));
+    }
+  }
+
  private:
   const SentBlock* precommitted_block_;
   const td::uint32 seqno_;
@@ -469,6 +477,14 @@ class ValidatorSessionState : public ValidatorSessionDescription::RootObject {
   auto get_ts(td::uint32 src_idx) const {
     return att_->at(src_idx);
   }
+  td::uint32 cur_attempt_in_round(const ValidatorSessionDescription& desc) const {
+    td::uint32 first_attempt = cur_round_->get_first_attempt(desc.get_self_idx());
+    td::uint32 cur_attempt = desc.get_attempt_seqno(desc.get_ts());
+    if (cur_attempt < first_attempt || first_attempt == 0) {
+      return 0;
+    }
+    return cur_attempt - first_attempt;
+  }
 
   const SentBlock* choose_block_to_sign(ValidatorSessionDescription& desc, td::uint32 src_idx, bool& found) const;
   const SentBlock* get_committed_block(ValidatorSessionDescription& desc, td::uint32 seqno) const;
@@ -514,6 +530,19 @@ class ValidatorSessionState : public ValidatorSessionDescription::RootObject {
   void dump(ValidatorSessionDescription& desc, td::StringBuilder& sb, td::uint32 att) const;
   void dump_cur_attempt(ValidatorSessionDescription& desc, td::StringBuilder& sb) const {
     cur_round_->dump_cur_attempt(desc, sb);
+  }
+
+  void for_each_cur_round_sent_block(std::function<void(const SessionBlockCandidate*)> foo) const {
+    cur_round_->for_each_sent_block(std::move(foo));
+  }
+
+  const SentBlock* get_cur_round_precommitted_block() const {
+    bool found;
+    return cur_round_->get_precommitted_block(found);
+  }
+
+  const CntVector<const SessionBlockCandidateSignature*>* get_cur_round_signatures() const {
+    return cur_round_->get_signatures();
   }
 
   static const ValidatorSessionState* make_one(ValidatorSessionDescription& desc, const ValidatorSessionState* state,

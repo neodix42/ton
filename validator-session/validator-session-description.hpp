@@ -18,13 +18,13 @@
 */
 #pragma once
 
-#include <set>
 #include <map>
-
-#include "validator-session.h"
-#include "validator-session-state.h"
+#include <set>
 
 #include "keys/encryptor.h"
+
+#include "validator-session-state.h"
+#include "validator-session.h"
 
 namespace ton {
 
@@ -65,7 +65,7 @@ class ValidatorSessionDescriptionImpl : public ValidatorSessionDescription {
     ~MemPool();
     void *alloc(size_t size, size_t align);
     void clear();
-    bool contains(const void* ptr) const;
+    bool contains(const void *ptr) const;
 
    private:
     size_t chunk_size_;
@@ -114,6 +114,7 @@ class ValidatorSessionDescriptionImpl : public ValidatorSessionDescription {
   }
   td::int32 get_node_priority(td::uint32 src_idx, td::uint32 round) const override;
   td::uint32 get_max_priority() const override;
+  td::uint32 get_node_by_priority(td::uint32 round, td::uint32 priority) const override;
   td::uint32 get_unixtime(td::uint64 ts) const override {
     return static_cast<td::uint32>(ts >> 32);
   }

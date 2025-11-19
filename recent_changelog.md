@@ -1,11 +1,9 @@
-## 2024.01 Update
+## 2025.11 Update
 
-1. Fixes in how gas in transactions on special accounts is accounted in block limit. Previously, gas was counted as usual, so to conduct elections that costs >30m gas block limit in masterchain was set to 37m gas. To lower the limit for safety reasons it is proposed to not count gas on special accounts. Besides `gas_max` is set to `special_gas_limit` for all types of transactions on special accounts. New behavior is activated through setting `gas_prices_v3` in `ConfigParam 20;`.
-   * Besides update of config temporally increases gas limit on `EQD_v9j1rlsuHHw2FIhcsCFFSD367ldfDdCKcsNmNpIRzUlu` to `special_gas_limit`, see [details](https://t.me/tonstatus/88).
-2. Improvements in LS behavior
-   * Improved detection of the state with all shards applied to decrease rate of `Block is not applied` error
-   * Better error logs: `block not in db` and `block is not applied` separation
-   * Fix error in proof generation for blocks after merge
-3. Improvements in DHT work and storage, CellDb, config.json ammendment, peer misbehavior detection, validator session stats collection, emulator.
+1. [TVM version v12](./doc/GlobalVersions.md) update: [forbid unused high bits in extra_flags](https://github.com/ton-blockchain/TEPs/pull/503/commits/d949d70d5a69026d273cbbc07653d12c4373117a), [bounce extra_flags equal to initial message extra_flags](https://github.com/ton-blockchain/TEPs/pull/503/commits/d33ff342d69de04f1c33d11360dcf06b63a6c21e), [new TVM opcodes](https://github.com/ton-blockchain/ton/commit/ecd8fbb833c408eb34ec1aa4516e9e4344b54a22).
+2. Abseil upgrade
+3. Improvements in node synchronisation
+4. Fixing rare ArchiveManager issues
+5. Various improvements in logging, builds, DHT node behavior, private net launching, failure handlers.
 
-Besides the work of the core team, this update is based on the efforts of @XaBbl4 (peer misbehavior detection).
+Besides the work of the core team, this update is based on the efforts of the @Lapo4kaKek and [Vahagn x.com/vah_13](https://x.com/vah_13).

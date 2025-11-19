@@ -25,31 +25,32 @@
 
     Copyright 2017-2020 Telegram Systems LLP
 */
-#include <vector>
-#include <string>
-#include <map>
-#include <set>
-#include <stack>
-#include <utility>
 #include <algorithm>
-#include <iostream>
+#include <cassert>
+#include <cstdio>
+#include <cstdlib>
 #include <fstream>
 #include <functional>
-#include <sstream>
-#include <cstdio>
-#include <cassert>
-#include <cstdlib>
 #include <getopt.h>
+#include <iostream>
+#include <map>
+#include <set>
+#include <sstream>
+#include <stack>
+#include <string>
+#include <utility>
+#include <vector>
 
-#include "common/refcnt.hpp"
 #include "common/bigint.hpp"
+#include "common/refcnt.hpp"
 #include "common/refint.h"
-#include "parser/srcread.h"
 #include "parser/lexer.h"
+#include "parser/srcread.h"
 #include "parser/symtable.h"
 #include "td/utils/Slice-decl.h"
-#include "td/utils/format.h"
 #include "td/utils/crypto.h"
+#include "td/utils/format.h"
+
 #include "tlbc-aux.h"
 #include "tlbc-data.h"
 #include "tlbc-gen-cpp.h"
@@ -420,7 +421,7 @@ void AdmissibilityInfo::operator|=(const AdmissibilityInfo& other) {
   std::size_t i, j, n = info.size(), n1 = other.info.size();
   assert(n1 && !(n1 & (n1 - 1)));
   for (i = j = 0; i < n; i++) {
-    info[i] = info[i] | other.info[j];
+    info[i] = info[i] || other.info[j];
     j = (j + 1) & (n1 - 1);
   }
 }
@@ -1800,9 +1801,6 @@ void Constructor::show(std::ostream& os, int mode) const {
   }
   for (int i = 0; i < type_arity; i++) {
     os << ' ';
-    if (param_negated.at(i)) {
-      os << '~';
-    }
     params.at(i)->show(os, this, 100, mode | 1);
   }
   if (!(mode & 2)) {
@@ -2511,7 +2509,7 @@ void define_builtins() {
   Bits_type = define_builtin_type("bits", "#", false, 1023, 0, true, 0);
   for (int i = 1; i <= 257; i++) {
     char buff[8];
-    sprintf(buff, "uint%d", i);
+    snprintf(buff, sizeof(buff), "uint%d", i);
     define_builtin_type(buff + 1, "", false, i, i, true, -1);
     if (i < 257) {
       define_builtin_type(buff, "", false, i, i, true, 1);
@@ -2519,7 +2517,7 @@ void define_builtins() {
   }
   for (int i = 1; i <= 1023; i++) {
     char buff[12];
-    sprintf(buff, "bits%d", i);
+    snprintf(buff, sizeof(buff), "bits%d", i);
     define_builtin_type(buff, "", false, i, i, true, 0);
   }
   Eq_type = define_builtin_type("=", "##", false, 0, 0, true);

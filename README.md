@@ -10,25 +10,33 @@
 </div>
 
 ## 
-[![TON Overflow Group][ton-overflow-badge]][ton-overflow-url]
-[![Stack Overflow Group][stack-overflow-badge]][stack-overflow-url]
-[![Telegram Community Chat][telegram-tondev-badge]][telegram-tondev-url]
-[![Telegram Community Group][telegram-community-badge]][telegram-community-url]
-[![Telegram Foundation Group][telegram-foundation-badge]][telegram-foundation-url]
-[![Twitter Group][twitter-badge]][twitter-url]
 
-[telegram-foundation-badge]: https://img.shields.io/badge/TON%20Foundation-2CA5E0?logo=telegram&logoColor=white&style=flat
-[telegram-community-badge]: https://img.shields.io/badge/TON%20Community-2CA5E0?logo=telegram&logoColor=white&style=flat
-[telegram-tondev-badge]: https://img.shields.io/badge/chat-TONDev-2CA5E0?logo=telegram&logoColor=white&style=flat
-[telegram-foundation-url]: https://t.me/tonblockchain
-[telegram-community-url]: https://t.me/toncoin
-[telegram-tondev-url]: https://t.me/tondev_eng
-[twitter-badge]: https://img.shields.io/twitter/follow/ton_blockchain
-[twitter-url]: https://twitter.com/ton_blockchain
-[stack-overflow-badge]: https://img.shields.io/badge/-Stack%20Overflow-FE7A16?style=flat&logo=stack-overflow&logoColor=white
-[stack-overflow-url]: https://stackoverflow.com/questions/tagged/ton
-[ton-overflow-badge]: https://img.shields.io/badge/-TON%20Overflow-FE7A16?style=flat&logo=stack-overflow&logoColor=white
-[ton-overflow-url]: https://answers.ton.org
+<p align="center">
+  <a href="https://tonresear.ch">
+    <img src="https://img.shields.io/badge/TON%20Research-0098EA?style=flat&logo=discourse&label=Forum&labelColor=gray" alt="Ton Research">
+  </a>
+  <a href="https://t.me/toncoin">
+    <img src="https://img.shields.io/badge/TON%20Community-0098EA?logo=telegram&logoColor=white&style=flat" alt="Telegram Community Group">
+  </a>
+  <a href="https://t.me/tonblockchain">
+    <img src="https://img.shields.io/badge/TON%20Foundation-0098EA?logo=telegram&logoColor=white&style=flat" alt="Telegram Foundation Group">
+  </a>
+  <a href="https://t.me/tondev_eng">
+    <img src="https://img.shields.io/badge/chat-TONDev-0098EA?logo=telegram&logoColor=white&style=flat" alt="Telegram Community Chat">
+  </a>
+</p>
+
+<p align="center">
+  <a href="https://twitter.com/ton_blockchain">
+    <img src="https://img.shields.io/twitter/follow/ton_blockchain" alt="Twitter Group">
+  </a>
+  <a href="https://answers.ton.org">
+    <img src="https://img.shields.io/badge/-TON%20Overflow-FE7A16?style=flat&logo=stack-overflow&logoColor=white" alt="TON Overflow Group">
+  </a>
+  <a href="https://stackoverflow.com/questions/tagged/ton">
+    <img src="https://img.shields.io/badge/-Stack%20Overflow-FE7A16?style=flat&logo=stack-overflow&logoColor=white" alt="Stack Overflow Group">
+  </a>
+</p>
 
 
 
@@ -39,9 +47,9 @@ Main TON monorepo, which includes the code of the node/validator, lite-client, t
 __The Open Network (TON)__ is a fast, secure, scalable blockchain focused on handling _millions of transactions per second_ (TPS) with the goal of reaching hundreds of millions of blockchain users.
 - To learn more about different aspects of TON blockchain and its underlying ecosystem check [documentation](https://ton.org/docs)
 - To run node, validator or lite-server check [Participate section](https://ton.org/docs/participate/nodes/run-node)
-- To develop decentralised apps check [Tutorials](https://ton.org/docs/develop/smart-contracts/), [FunC docs](https://ton.org/docs/develop/func/overview) and [DApp tutorials](https://ton.org/docs/develop/dapps/)
+- To develop decentralised apps check [Tutorials](https://docs.ton.org/v3/guidelines/smart-contracts/guidelines), [FunC docs](https://ton.org/docs/develop/func/overview) and [DApp tutorials](https://docs.ton.org/v3/guidelines/dapps/overview)
 - To work on TON check [wallets](https://ton.app/wallets), [explorers](https://ton.app/explorers), [DEXes](https://ton.app/dex) and [utilities](https://ton.app/utilities)
-- To interact with TON check [APIs](https://ton.org/docs/develop/dapps/apis/)
+- To interact with TON check [APIs](https://docs.ton.org/v3/guidelines/dapps/apis-sdks/overview)
 
 ## Updates flow
 
@@ -63,7 +71,7 @@ Usually, the response to your pull request will indicate which section it falls 
 
 ## Build TON blockchain
 
-### Ubuntu 20.4, 22.04 (x86-64, aarch64)
+### Ubuntu 20.4, 22.04, 24.04 (x86-64, aarch64)
 Install additional system libraries
 ```bash
   sudo apt-get update
@@ -133,18 +141,10 @@ Compile TON tonlib library
   ./build-android-tonlib.sh
 ```
 
-### Build TON portable binaries with Nix package manager
-You need to install Nix first.
-```bash
-   sh <(curl -L https://nixos.org/nix/install) --daemon
-```
-Then compile TON with Nix by executing below command from the root folder: 
-```bash
-  cp -r assembly/nix/* .
-  export NIX_PATH=nixpkgs=https://github.com/nixOS/nixpkgs/archive/23.05.tar.gz
-  nix-build linux-x86-64-static.nix
-```
-More examples for other platforms can be found under `assembly/nix`.  
+### TON portable binaries
+
+Linux portable binaries are wrapped into AppImages, at the same time MacOS portable binaries are statically linked executables.
+Linux and MacOS binaries are available for both x86-64 and arm64 architectures. 
 
 ## Running tests
 
