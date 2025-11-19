@@ -18,20 +18,18 @@
 */
 #pragma once
 
-#include <vector>
 #include <utility>
+#include <vector>
 
-#include "ton/ton-types.h"
-
-#include "td/actor/actor.h"
-
+#include "adnl/adnl-ext-client.h"
 #include "adnl/adnl.h"
-#include "rldp/rldp.h"
-#include "rldp2/rldp.h"
 #include "dht/dht.h"
 #include "overlay/overlays.h"
+#include "rldp/rldp.h"
+#include "rldp2/rldp.h"
+#include "td/actor/actor.h"
+#include "ton/ton-types.h"
 #include "validator/validator.h"
-#include "adnl/adnl-ext-client.h"
 
 namespace ton {
 
@@ -59,6 +57,7 @@ struct FullNodeOptions {
   FullNodeConfig config_;
   double public_broadcast_speed_multiplier_ = 1.0;
   double private_broadcast_speed_multiplier_ = 1.0;
+  double initial_sync_delay_ = 60.0;
 };
 
 struct CustomOverlayParams {
@@ -67,6 +66,7 @@ struct CustomOverlayParams {
   std::map<adnl::AdnlNodeIdShort, int> msg_senders_;
   std::set<adnl::AdnlNodeIdShort> block_senders_;
   std::vector<ShardIdFull> sender_shards_;
+  bool skip_public_msg_send_ = false;
 
   bool send_shard(const ShardIdFull& shard) const;
   static CustomOverlayParams fetch(const ton_api::engine_validator_customOverlay& f);
@@ -80,10 +80,11 @@ class FullNode : public td::actor::Actor {
 
   virtual void add_permanent_key(PublicKeyHash key, td::Promise<td::Unit> promise) = 0;
   virtual void del_permanent_key(PublicKeyHash key, td::Promise<td::Unit> promise) = 0;
+  virtual void add_collator_adnl_id(adnl::AdnlNodeIdShort id) = 0;
+  virtual void del_collator_adnl_id(adnl::AdnlNodeIdShort id) = 0;
 
-  virtual void sign_shard_overlay_certificate(ShardIdFull shard_id, PublicKeyHash signed_key,
-                                              td::uint32 expiry_at, td::uint32 max_size,
-                                              td::Promise<td::BufferSlice> promise) = 0;
+  virtual void sign_shard_overlay_certificate(ShardIdFull shard_id, PublicKeyHash signed_key, td::uint32 expiry_at,
+                                              td::uint32 max_size, td::Promise<td::BufferSlice> promise) = 0;
   virtual void import_shard_overlay_certificate(ShardIdFull shard_id, PublicKeyHash signed_key,
                                                 std::shared_ptr<ton::overlay::Certificate> cert,
                                                 td::Promise<td::Unit> promise) = 0;
@@ -101,6 +102,9 @@ class FullNode : public td::actor::Actor {
 
   virtual void set_validator_telemetry_filename(std::string value) = 0;
 
+  virtual void import_fast_sync_member_certificate(adnl::AdnlNodeIdShort local_id,
+                                                   overlay::OverlayMemberCertificate cert) = 0;
+
   static constexpr td::uint32 max_block_size() {
     return 4 << 20;
   }
@@ -110,7 +114,9 @@ class FullNode : public td::actor::Actor {
   static constexpr td::uint64 max_state_size() {
     return 4ull << 30;
   }
-  enum { broadcast_mode_public = 1, broadcast_mode_private_block = 2, broadcast_mode_custom = 4 };
+  enum { broadcast_mode_public = 1, broadcast_mode_fast_sync = 2, broadcast_mode_custom = 4 };
+
+  static constexpr td::int32 MAX_FAST_SYNC_OVERLAY_CLIENTS = 5;
 
   static td::actor::ActorOwn<FullNode> create(
       ton::PublicKeyHash local_id, adnl::AdnlNodeIdShort adnl_id, FileHash zero_state_file_hash, FullNodeOptions opts,

@@ -15,13 +15,14 @@
     along with TON Blockchain.  If not, see <http://www.gnu.org/licenses/>.
 */
 #pragma once
-#include "common/refcnt.hpp"
-#include "vm/dict.h"
-#include "ton/ton-types.h"
-#include "ton/ton-shard.h"
 #include "common/bitstring.h"
-#include "block.h"
+#include "common/refcnt.hpp"
+#include "ton/ton-shard.h"
+#include "ton/ton-types.h"
 #include "vm/db/CellHashTable.h"
+#include "vm/dict.h"
+
+#include "block.h"
 
 namespace block {
 using td::Ref;
@@ -55,6 +56,10 @@ class AccountStorageStat {
   td::Result<td::Bits256> get_dict_hash() {
     TRY_RESULT(root, get_dict_root());
     return root.is_null() ? td::Bits256::zero() : td::Bits256{root->get_hash().bits()};
+  }
+
+  bool is_dict_ready() const {
+    return dict_up_to_date_;
   }
 
   void apply_child_stat(AccountStorageStat &&child);

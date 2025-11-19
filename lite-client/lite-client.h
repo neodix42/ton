@@ -26,17 +26,18 @@
     Copyright 2017-2020 Telegram Systems LLP
 */
 #pragma once
-#include "ext-client.h"
 #include "adnl/adnl-ext-client.h"
-#include "tl-utils/tl-utils.hpp"
-#include "ton/ton-types.h"
-#include "terminal/terminal.h"
-#include "vm/cells.h"
-#include "vm/stack.hpp"
+#include "auto/tl/lite_api.h"
 #include "block/block.h"
 #include "block/mc-config.h"
 #include "td/utils/filesystem.h"
-#include "auto/tl/lite_api.h"
+#include "terminal/terminal.h"
+#include "tl-utils/tl-utils.hpp"
+#include "ton/ton-types.h"
+#include "vm/cells.h"
+#include "vm/stack.hpp"
+
+#include "ext-client.h"
 
 using td::Ref;
 
@@ -324,7 +325,8 @@ class TestNode : public td::actor::Actor {
   void send_compute_complaint_price_query(ton::StdSmcAddress elector_addr, unsigned expires_in, unsigned bits,
                                           unsigned refs, td::Bits256 chash, std::string filename);
   bool get_msg_queue_sizes();
-  void got_msg_queue_sizes(ton::tl_object_ptr<ton::lite_api::liteServer_outMsgQueueSizes> f);
+  void get_msg_queue_sizes_cont(ton::BlockIdExt mc_blkid, td::BufferSlice data);
+  void get_msg_queue_sizes_finish(std::vector<ton::BlockIdExt> blocks, std::vector<td::uint64> sizes);
   bool get_dispatch_queue_info(ton::BlockIdExt block_id);
   bool get_dispatch_queue_info_cont(ton::BlockIdExt block_id, bool first, td::Bits256 after_addr);
   void got_dispatch_queue_info(ton::BlockIdExt block_id,

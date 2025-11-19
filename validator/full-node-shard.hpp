@@ -18,11 +18,13 @@
 */
 #pragma once
 
+#include <set>
+
 #include "auto/tl/ton_api.h"
-#include "full-node-shard.h"
 #include "td/actor/PromiseFuture.h"
 #include "td/utils/port/Poll.h"
-#include <set>
+
+#include "full-node-shard.h"
 
 namespace ton {
 
@@ -129,8 +131,6 @@ class FullNodeShardImpl : public FullNodeShard {
                      td::Promise<td::BufferSlice> promise);
   void process_query(adnl::AdnlNodeIdShort src, ton_api::tonNode_downloadZeroState &query,
                      td::Promise<td::BufferSlice> promise);
-  void process_query(adnl::AdnlNodeIdShort src, ton_api::tonNode_downloadPersistentState &query,
-                     td::Promise<td::BufferSlice> promise);
   void process_query(adnl::AdnlNodeIdShort src, ton_api::tonNode_downloadPersistentStateSlice &query,
                      td::Promise<td::BufferSlice> promise);
   void process_query(adnl::AdnlNodeIdShort src, ton_api::tonNode_getCapabilities &query,
@@ -143,19 +143,28 @@ class FullNodeShardImpl : public FullNodeShard {
                      td::Promise<td::BufferSlice> promise);
   void process_query(adnl::AdnlNodeIdShort src, ton_api::tonNode_getOutMsgQueueProof &query,
                      td::Promise<td::BufferSlice> promise);
+  void process_query(adnl::AdnlNodeIdShort src, ton_api::tonNode_downloadPersistentStateSliceV2 &query,
+                     td::Promise<td::BufferSlice> promise);
+  void process_query(adnl::AdnlNodeIdShort src, ton_api::tonNode_getPersistentStateSizeV2 &query,
+                     td::Promise<td::BufferSlice> promise);
   void receive_query(adnl::AdnlNodeIdShort src, td::BufferSlice query, td::Promise<td::BufferSlice> promise);
   void receive_message(adnl::AdnlNodeIdShort src, td::BufferSlice data);
 
   void process_broadcast(PublicKeyHash src, ton_api::tonNode_blockBroadcast &query);
   void process_broadcast(PublicKeyHash src, ton_api::tonNode_blockBroadcastCompressed &query);
+  void process_broadcast(PublicKeyHash src, ton_api::tonNode_blockBroadcastCompressedV2 &query);
   void process_block_broadcast(PublicKeyHash src, ton_api::tonNode_Broadcast &query);
 
   void process_broadcast(PublicKeyHash src, ton_api::tonNode_ihrMessageBroadcast &query);
   void process_broadcast(PublicKeyHash src, ton_api::tonNode_externalMessageBroadcast &query);
   void process_broadcast(PublicKeyHash src, ton_api::tonNode_newShardBlockBroadcast &query);
+  void process_broadcast(PublicKeyHash src, ton_api::tonNode_outMsgQueueProofBroadcast &query) {
+    LOG(ERROR) << "Ignore outMsgQueueProofBroadcast";
+  }
 
   void process_broadcast(PublicKeyHash src, ton_api::tonNode_newBlockCandidateBroadcast &query);
   void process_broadcast(PublicKeyHash src, ton_api::tonNode_newBlockCandidateBroadcastCompressed &query);
+  void process_broadcast(PublicKeyHash src, ton_api::tonNode_newBlockCandidateBroadcastCompressedV2 &query);
   void process_block_candidate_broadcast(PublicKeyHash src, ton_api::tonNode_Broadcast &query);
 
   void receive_broadcast(PublicKeyHash src, td::BufferSlice query);
@@ -174,8 +183,9 @@ class FullNodeShardImpl : public FullNodeShard {
                       td::Promise<ReceivedBlock> promise) override;
   void download_zero_state(BlockIdExt id, td::uint32 priority, td::Timestamp timeout,
                            td::Promise<td::BufferSlice> promise) override;
-  void download_persistent_state(BlockIdExt id, BlockIdExt masterchain_block_id, td::uint32 priority,
-                                 td::Timestamp timeout, td::Promise<td::BufferSlice> promise) override;
+  void download_persistent_state(BlockIdExt id, BlockIdExt masterchain_block_id, PersistentStateType type,
+                                 td::uint32 priority, td::Timestamp timeout,
+                                 td::Promise<td::BufferSlice> promise) override;
 
   void download_block_proof(BlockIdExt block_id, td::uint32 priority, td::Timestamp timeout,
                             td::Promise<td::BufferSlice> promise) override;
@@ -197,8 +207,10 @@ class FullNodeShardImpl : public FullNodeShard {
 
   void update_validators(std::vector<PublicKeyHash> public_key_hashes, PublicKeyHash local_hash) override;
 
-  void sign_overlay_certificate(PublicKeyHash signed_key, td::uint32 expiry_at, td::uint32 max_size, td::Promise<td::BufferSlice> promise) override;
-  void import_overlay_certificate(PublicKeyHash signed_key, std::shared_ptr<ton::overlay::Certificate> cert, td::Promise<td::Unit> promise) override;
+  void sign_overlay_certificate(PublicKeyHash signed_key, td::uint32 expiry_at, td::uint32 max_size,
+                                td::Promise<td::BufferSlice> promise) override;
+  void import_overlay_certificate(PublicKeyHash signed_key, std::shared_ptr<ton::overlay::Certificate> cert,
+                                  td::Promise<td::Unit> promise) override;
 
   void sign_new_certificate(PublicKeyHash sign_by);
   void signed_new_certificate(ton::overlay::Certificate cert);
@@ -208,10 +220,10 @@ class FullNodeShardImpl : public FullNodeShard {
   void got_neighbours(std::vector<adnl::AdnlNodeIdShort> res);
   void update_neighbour_stats(adnl::AdnlNodeIdShort adnl_id, double t, bool success);
   void got_neighbour_capabilities(adnl::AdnlNodeIdShort adnl_id, double t, td::BufferSlice data);
-  const Neighbour &choose_neighbour() const;
+  const Neighbour &choose_neighbour(td::uint32 required_version_major = 0, td::uint32 required_version_minor = 0) const;
 
   template <typename T>
-  td::Promise<T> create_neighbour_promise(const Neighbour &x, td::Promise<T> p) {
+  td::Promise<T> create_neighbour_promise(const Neighbour &x, td::Promise<T> p, bool require_state = false) {
     return td::PromiseCreator::lambda([id = x.adnl_id, SelfId = actor_id(this), p = std::move(p),
                                        ts = td::Time::now()](td::Result<T> R) mutable {
       if (R.is_error() && R.error().code() != ErrorCode::notready && R.error().code() != ErrorCode::cancelled) {

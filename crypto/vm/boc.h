@@ -17,19 +17,19 @@
     Copyright 2017-2020 Telegram Systems LLP
 */
 #pragma once
-#include "td/utils/CancellationToken.h"
-
-#include <set>
 #include <map>
-#include "vm/db/DynamicBagOfCellsDb.h"
-#include "vm/cells.h"
-#include "td/utils/Status.h"
-#include "td/utils/buffer.h"
+#include <set>
+
+#include "td/utils/CancellationToken.h"
 #include "td/utils/HashMap.h"
 #include "td/utils/HashSet.h"
+#include "td/utils/Status.h"
 #include "td/utils/Time.h"
 #include "td/utils/Timer.h"
+#include "td/utils/buffer.h"
 #include "td/utils/port/FileFd.h"
+#include "vm/cells.h"
+#include "vm/db/DynamicBagOfCellsDb.h"
 
 namespace vm {
 using td::Ref;
@@ -143,6 +143,7 @@ struct CellStorageStat {
   td::Result<CellInfo> add_used_storage(const CellSlice& cs, bool kill_dup = true, unsigned skip_count_root = 0);
   td::Result<CellInfo> add_used_storage(CellSlice&& cs, bool kill_dup = true, unsigned skip_count_root = 0);
   td::Result<CellInfo> add_used_storage(Ref<vm::Cell> cell, bool kill_dup = true, unsigned skip_count_root = 0);
+  td::Result<CellInfo> add_used_storage(td::Span<Ref<Cell>> cells, bool kill_dup = true, unsigned skip_count_root = 0);
 
   unsigned long long limit_cells = std::numeric_limits<unsigned long long>::max();
   unsigned long long limit_bits = std::numeric_limits<unsigned long long>::max();
@@ -165,13 +166,21 @@ struct VmStorageStat {
 
 class ProofStorageStat {
  public:
-  void add_cell(const Ref<DataCell>& cell);
+  void add_loaded_cell(const Ref<DataCell>& cell, td::uint8 max_level = Cell::max_level);
+  void add_loaded_cells(const ProofStorageStat& other);
   td::uint64 estimate_proof_size() const;
+
+  enum CellStatus { c_none = 0, c_prunned = 1, c_loaded = 2 };
+  CellStatus get_cell_status(const Cell::Hash& hash) const;
+  bool is_loaded(const Cell::Hash& hash) const {
+    return get_cell_status(hash) == c_loaded;
+  }
+
+  static td::uint64 estimate_prunned_size();
+  static td::uint64 estimate_serialized_size(const Ref<DataCell>& cell);
+
  private:
-  enum CellStatus {
-    c_none = 0, c_prunned = 1, c_loaded = 2
-  };
-  td::HashMap<vm::Cell::Hash, CellStatus> cells_;
+  td::HashMap<Cell::Hash, std::pair<CellStatus, td::uint64>> cells_;
   td::uint64 proof_size_ = 0;
 };
 
@@ -396,6 +405,6 @@ td::Result<td::BufferSlice> std_boc_serialize_multi(std::vector<Ref<Cell>> root,
 td::Status std_boc_serialize_to_file(Ref<Cell> root, td::FileFd& fd, int mode = 0,
                                      td::CancellationToken cancellation_token = {});
 td::Status boc_serialize_to_file_large(std::shared_ptr<CellDbReader> reader, Cell::Hash root_hash, td::FileFd& fd,
-                                           int mode = 0, td::CancellationToken cancellation_token = {});
+                                       int mode = 0, td::CancellationToken cancellation_token = {});
 
 }  // namespace vm

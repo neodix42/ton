@@ -25,41 +25,41 @@
 
     Copyright 2017-2020 Telegram Systems LLP
 */
-#include "lite-client.h"
-
-#include "lite-client-common.h"
-
-#include "tl-utils/lite-utils.hpp"
-#include "auto/tl/ton_api_json.h"
 #include "auto/tl/lite_api.hpp"
-#include "td/utils/OptionParser.h"
-#include "td/utils/Time.h"
-#include "td/utils/filesystem.h"
-#include "td/utils/Random.h"
-#include "td/utils/crypto.h"
-#include "td/utils/port/signals.h"
-#include "td/utils/port/FileFd.h"
-#include "ton/lite-tl.hpp"
-#include "block/block-db.h"
-#include "block/block.h"
-#include "block/block-parse.h"
+#include "auto/tl/ton_api_json.h"
 #include "block/block-auto.h"
-#include "block/mc-config.h"
+#include "block/block-db.h"
+#include "block/block-parse.h"
+#include "block/block.h"
 #include "block/check-proof.h"
+#include "block/mc-config.h"
+#include "common/checksum.h"
+#include "crypto/common/util.h"
+#include "crypto/vm/utils.h"
+#include "td/utils/OptionParser.h"
+#include "td/utils/Random.h"
+#include "td/utils/Time.h"
+#include "td/utils/crypto.h"
+#include "td/utils/filesystem.h"
+#include "td/utils/port/FileFd.h"
+#include "td/utils/port/signals.h"
+#include "tl-utils/lite-utils.hpp"
+#include "ton/lite-tl.hpp"
 #include "vm/boc.h"
 #include "vm/cellops.h"
 #include "vm/cells/MerkleProof.h"
-#include "vm/vm.h"
 #include "vm/cp0.h"
 #include "vm/memo.h"
-#include "crypto/vm/utils.h"
-#include "crypto/common/util.h"
-#include "common/checksum.h"
+#include "vm/vm.h"
+
+#include "lite-client-common.h"
+#include "lite-client.h"
 
 #if TD_DARWIN || TD_LINUX
 #include <unistd.h>
 #endif
 #include <iostream>
+
 #include "git.h"
 
 using namespace std::literals::string_literals;
@@ -108,7 +108,7 @@ void TestNode::run() {
     if (single_liteserver_idx_ != -1) {  // Use single liteserver from config
       CHECK(single_liteserver_idx_ >= 0 && (size_t)single_liteserver_idx_ < servers.size());
       td::TerminalIO::out() << "using liteserver #" << single_liteserver_idx_ << " with addr "
-                            << servers[single_liteserver_idx_].addr << "\n";
+                            << servers[single_liteserver_idx_].hostname << "\n";
       servers = {servers[single_liteserver_idx_]};
     }
   }
@@ -422,7 +422,12 @@ void TestNode::got_server_mc_block_id(ton::BlockIdExt blkid, ton::ZeroStateIdExt
   }
   td::TerminalIO::out() << "latest masterchain block known to server is " << blkid.to_str();
   if (created > 0) {
-    td::TerminalIO::out() << " created at " << created << " (" << now() - created << " seconds ago)\n";
+    auto time = now();
+    if (time >= created) {
+      td::TerminalIO::out() << " created at " << created << " (" << time - created << " seconds ago)\n";
+    } else {
+      td::TerminalIO::out() << " created at " << created << " (" << created - time << " seconds in the future)\n";
+    }
   } else {
     td::TerminalIO::out() << "\n";
   }
@@ -1627,27 +1632,93 @@ void TestNode::send_compute_complaint_price_query(ton::StdSmcAddress elector_add
 }
 
 bool TestNode::get_msg_queue_sizes() {
-  auto q = ton::serialize_tl_object(ton::create_tl_object<ton::lite_api::liteServer_getOutMsgQueueSizes>(0, 0, 0), true);
-  return envelope_send_query(std::move(q), [Self = actor_id(this)](td::Result<td::BufferSlice> res) -> void {
-    if (res.is_error()) {
-      LOG(ERROR) << "liteServer.getOutMsgQueueSizes error: " << res.move_as_error();
+  ton::BlockIdExt blkid = mc_last_id_;
+  if (!blkid.is_valid_full()) {
+    return set_error("must obtain last block information before making other queries");
+  }
+  if (!(ready_ && !client_.empty())) {
+    return set_error("server connection not ready");
+  }
+  auto b =
+      ton::create_serialize_tl_object<ton::lite_api::liteServer_getAllShardsInfo>(ton::create_tl_lite_block_id(blkid));
+  LOG(INFO) << "requesting recent shard configuration";
+  return envelope_send_query(std::move(b), [Self = actor_id(this), blkid](td::Result<td::BufferSlice> R) -> void {
+    if (R.is_error()) {
       return;
     }
-    auto F = ton::fetch_tl_object<ton::lite_api::liteServer_outMsgQueueSizes>(res.move_as_ok(), true);
+    auto F = ton::fetch_tl_object<ton::lite_api::liteServer_allShardsInfo>(R.move_as_ok(), true);
     if (F.is_error()) {
-      LOG(ERROR) << "cannot parse answer to liteServer.getOutMsgQueueSizes";
-      return;
+      LOG(ERROR) << "cannot parse answer to liteServer.getAllShardsInfo";
+    } else {
+      auto f = F.move_as_ok();
+      td::actor::send_closure_later(Self, &TestNode::get_msg_queue_sizes_cont, blkid, std::move(f->data_));
     }
-    td::actor::send_closure_later(Self, &TestNode::got_msg_queue_sizes, F.move_as_ok());
   });
 }
 
-void TestNode::got_msg_queue_sizes(ton::tl_object_ptr<ton::lite_api::liteServer_outMsgQueueSizes> f) {
-  td::TerminalIO::out() << "Outbound message queue sizes:" << std::endl;
-  for (auto &x : f->shards_) {
-    td::TerminalIO::out() << ton::create_block_id(x->id_).id.to_str() << "    " << x->size_ << std::endl;
+void TestNode::get_msg_queue_sizes_cont(ton::BlockIdExt mc_blkid, td::BufferSlice data) {
+  LOG(INFO) << "got shard configuration with respect to block " << mc_blkid.to_str();
+  std::vector<ton::BlockIdExt> blocks;
+  blocks.push_back(mc_blkid);
+  auto R = vm::std_boc_deserialize(data.clone());
+  if (R.is_error()) {
+    set_error(R.move_as_error_prefix("cannot deserialize shard configuration: "));
+    return;
   }
-  td::TerminalIO::out() << "External message queue size limit: " << f->ext_msg_queue_size_limit_ << std::endl;
+  auto root = R.move_as_ok();
+  block::ShardConfig sh_conf;
+  if (!sh_conf.unpack(vm::load_cell_slice_ref(root))) {
+    set_error("cannot extract shard block list from shard configuration");
+    return;
+  }
+  auto ids = sh_conf.get_shard_hash_ids(true);
+  for (auto id : ids) {
+    auto ref = sh_conf.get_shard_hash(ton::ShardIdFull(id));
+    if (ref.not_null()) {
+      blocks.push_back(ref->top_block_id());
+    }
+  }
+
+  struct QueryInfo {
+    std::vector<ton::BlockIdExt> blocks;
+    std::vector<td::uint64> sizes;
+    size_t pending;
+  };
+  auto info = std::make_shared<QueryInfo>();
+  info->blocks = std::move(blocks);
+  info->sizes.resize(info->blocks.size(), 0);
+  info->pending = info->blocks.size();
+
+  for (size_t i = 0; i < info->blocks.size(); ++i) {
+    ton::BlockIdExt block_id = info->blocks[i];
+    auto b = ton::create_serialize_tl_object<ton::lite_api::liteServer_getBlockOutMsgQueueSize>(
+        0, ton::create_tl_lite_block_id(block_id), false);
+    LOG(DEBUG) << "requesting queue size for block " << block_id.to_str();
+    envelope_send_query(std::move(b), [=, this](td::Result<td::BufferSlice> R) -> void {
+      if (R.is_error()) {
+        return;
+      }
+      auto F = ton::fetch_tl_object<ton::lite_api::liteServer_blockOutMsgQueueSize>(R.move_as_ok(), true);
+      if (F.is_error()) {
+        set_error(F.move_as_error_prefix("failed to get queue size: "));
+        return;
+      }
+      auto f = F.move_as_ok();
+      LOG(DEBUG) << "got queue size for block " << block_id.to_str() << " : " << f->size_;
+      info->sizes[i] = f->size_;
+      if (--info->pending == 0) {
+        get_msg_queue_sizes_finish(std::move(info->blocks), std::move(info->sizes));
+      }
+    });
+  }
+}
+
+void TestNode::get_msg_queue_sizes_finish(std::vector<ton::BlockIdExt> blocks, std::vector<td::uint64> sizes) {
+  CHECK(blocks.size() == sizes.size());
+  td::TerminalIO::out() << "Outbound message queue sizes:" << std::endl;
+  for (size_t i = 0; i < blocks.size(); ++i) {
+    td::TerminalIO::out() << blocks[i].id.to_str() << "    " << sizes[i] << std::endl;
+  }
 }
 
 bool TestNode::get_dispatch_queue_info(ton::BlockIdExt block_id) {
@@ -2345,7 +2416,7 @@ void TestNode::got_one_transaction(ton::BlockIdExt req_blkid, ton::BlockIdExt bl
   }
   auto proof_root = P.move_as_ok();
   try {
-    auto block_root = vm::MerkleProof::virtualize(std::move(proof_root), 1);
+    auto block_root = vm::MerkleProof::virtualize(std::move(proof_root));
     if (block_root.is_null()) {
       LOG(ERROR) << "transaction block proof is invalid";
       return;
@@ -2795,7 +2866,7 @@ void TestNode::got_config_params(ton::BlockIdExt req_blkid, int mode, std::strin
           block::check_extract_state_proof(blkid, f->state_proof_.as_slice(), f->config_proof_.as_slice()),
           PSLICE() << "masterchain state proof for " << blkid.to_str() << " is invalid :");
     } else {
-      block = vm::MerkleProof::virtualize(config_proof, 1);
+      block = vm::MerkleProof::virtualize(config_proof);
       if (block.is_null()) {
         promise.set_error(
             td::Status::Error("cannot virtualize configuration proof constructed from key block "s + blkid.to_str()));
@@ -3181,7 +3252,7 @@ void TestNode::got_block_header_raw(td::BufferSlice res, td::Promise<TestNode::B
   bool ok = false;
   td::Status E;
   try {
-    auto virt_root = vm::MerkleProof::virtualize(root, 1);
+    auto virt_root = vm::MerkleProof::virtualize(root);
     if (virt_root.is_null()) {
       promise.set_error(td::Status::Error(PSLICE() << "block header proof for block " << blk_id.to_str()
                                                    << " is not a valid Merkle proof"));
@@ -3263,7 +3334,7 @@ void TestNode::got_block_header(ton::BlockIdExt blkid, td::BufferSlice data, int
   cs.print_rec(print_limit_, outp);
   td::TerminalIO::out() << outp.str();
   try {
-    auto virt_root = vm::MerkleProof::virtualize(root, 1);
+    auto virt_root = vm::MerkleProof::virtualize(root);
     if (virt_root.is_null()) {
       LOG(ERROR) << " block header proof for block " << blkid.to_str() << " is not a valid Merkle proof";
       return;
@@ -3749,16 +3820,16 @@ void TestNode::continue_check_validator_load3(std::unique_ptr<TestNode::Validato
     }
     auto catchain_config = std::make_unique<block::CatchainValidatorsConfig>(
         block::Config::unpack_catchain_validators_config(info1->config->get_config_param(28)));
-    load_validator_shard_shares(
-        start_seqno, end_seqno, std::move(validator_set), std::move(catchain_config),
-        [=, this, info1 = std::move(info1),
-         info2 = std::move(info2)](td::Result<std::map<td::Bits256, td::uint64>> R) mutable {
-          if (R.is_error()) {
-            LOG(ERROR) << "failed to load validator shard shares: " << R.move_as_error();
-          } else {
-            continue_check_validator_load4(std::move(info1), std::move(info2), mode, file_pfx, R.move_as_ok());
-          }
-        });
+    load_validator_shard_shares(start_seqno, end_seqno, std::move(validator_set), std::move(catchain_config),
+                                [=, this, info1 = std::move(info1),
+                                 info2 = std::move(info2)](td::Result<std::map<td::Bits256, td::uint64>> R) mutable {
+                                  if (R.is_error()) {
+                                    LOG(ERROR) << "failed to load validator shard shares: " << R.move_as_error();
+                                  } else {
+                                    continue_check_validator_load4(std::move(info1), std::move(info2), mode, file_pfx,
+                                                                   R.move_as_ok());
+                                  }
+                                });
   } else {
     continue_check_validator_load4(std::move(info1), std::move(info2), mode, std::move(file_pfx), {});
   }
@@ -3970,7 +4041,7 @@ void TestNode::load_validator_shard_shares_cont(std::shared_ptr<LoadValidatorSha
         ton::CatchainSeqno cc_seqno = shards1.get_shard_cc_seqno(shard);
         auto val_set =
             block::ConfigInfo::do_compute_validator_set(*state->catchain_config, shard, state->validator_set, cc_seqno);
-        for (const auto &val : val_set) {
+        for (const auto& val : val_set) {
           result[val.key.as_bits256()] += blocks_count;
         }
       };
@@ -3998,7 +4069,7 @@ void TestNode::load_validator_shard_shares_cont(std::shared_ptr<LoadValidatorSha
         }
       }
     }
-  } catch (vm::VmError &e) {
+  } catch (vm::VmError& e) {
     state->promise.set_error(e.as_status("cannot parse shard hashes: "));
     return;
   }
@@ -4035,7 +4106,7 @@ bool compute_punishment_default(int interval, bool severe, td::RefInt256& fine, 
   fine = td::make_refint(101 * 1000000000LL);  // 101
   fine_part = 0;
 
-  return true; // todo: (tolya-yanot) temporary reduction of fine
+  return true;  // todo: (tolya-yanot) temporary reduction of fine
 
   if (severe) {
     fine = td::make_refint(2500 * 1000000000LL);  // GR$2500
@@ -4057,41 +4128,49 @@ bool compute_punishment_default(int interval, bool severe, td::RefInt256& fine, 
   return true;
 }
 
-bool compute_punishment(int interval, bool severe, td::RefInt256& fine, unsigned& fine_part, Ref<vm::Cell> punishment_params) {
-  if(punishment_params.is_null()) {
+bool compute_punishment(int interval, bool severe, td::RefInt256& fine, unsigned& fine_part,
+                        Ref<vm::Cell> punishment_params) {
+  if (punishment_params.is_null()) {
     return compute_punishment_default(interval, severe, fine, fine_part);
   }
   block::gen::MisbehaviourPunishmentConfig::Record rec;
   if (!tlb::unpack_cell(punishment_params, rec)) {
-      return false;
+    return false;
   }
 
-  if(interval <= rec.unpunishable_interval) {
-      return false;
+  if (interval <= rec.unpunishable_interval) {
+    return false;
   }
 
   fine = block::tlb::t_Grams.as_integer(rec.default_flat_fine);
   fine_part = rec.default_proportional_fine;
 
   if (severe) {
-    fine = fine * rec.severity_flat_mult; fine >>= 8;
-    fine_part = fine_part * rec.severity_proportional_mult; fine_part >>= 8;
+    fine = fine * rec.severity_flat_mult;
+    fine >>= 8;
+    fine_part = fine_part * rec.severity_proportional_mult;
+    fine_part >>= 8;
   }
 
   if (interval >= rec.long_interval) {
-    fine = fine * rec.long_flat_mult; fine >>= 8;
-    fine_part = fine_part * rec.long_proportional_mult; fine_part >>= 8;
+    fine = fine * rec.long_flat_mult;
+    fine >>= 8;
+    fine_part = fine_part * rec.long_proportional_mult;
+    fine_part >>= 8;
     return true;
   }
   if (interval >= rec.medium_interval) {
-    fine = fine * rec.medium_flat_mult; fine >>= 8;
-    fine_part = fine_part * rec.medium_proportional_mult; fine_part >>= 8;
+    fine = fine * rec.medium_flat_mult;
+    fine >>= 8;
+    fine_part = fine_part * rec.medium_proportional_mult;
+    fine_part >>= 8;
     return true;
   }
   return true;
 }
 
-bool check_punishment(int interval, bool severe, td::RefInt256 fine, unsigned fine_part, Ref<vm::Cell> punishment_params) {
+bool check_punishment(int interval, bool severe, td::RefInt256 fine, unsigned fine_part,
+                      Ref<vm::Cell> punishment_params) {
   td::RefInt256 computed_fine;
   unsigned computed_fine_part;
   return compute_punishment(interval, severe, computed_fine, computed_fine_part, punishment_params) &&
@@ -4127,7 +4206,7 @@ td::Status TestNode::write_val_create_proof(TestNode::ValidatorLoadInfo& info1, 
 
   int severity = (severe ? 2 : 1);
   td::RefInt256 fine = td::make_refint(101000000000);
-  unsigned fine_part = 0; // todo: (tolya-yanot) temporary reduction of fine  // 0xffffffff / 16;  // 1/16
+  unsigned fine_part = 0;  // todo: (tolya-yanot) temporary reduction of fine  // 0xffffffff / 16;  // 1/16
   if (!compute_punishment(interval, severe, fine, fine_part, punishment_params)) {
     return td::Status::Error("cannot compute adequate punishment");
   }
@@ -4170,12 +4249,12 @@ td::Status TestNode::write_val_create_proof(TestNode::ValidatorLoadInfo& info1, 
 }
 
 td::Status TestNode::ValidatorLoadInfo::check_header_proof(ton::UnixTime* save_utime, ton::LogicalTime* save_lt) const {
-  auto state_virt_root = vm::MerkleProof::virtualize(std::move(data_proof), 1);
+  auto state_virt_root = vm::MerkleProof::virtualize(std::move(data_proof));
   if (state_virt_root.is_null()) {
     return td::Status::Error("account state proof is invalid");
   }
   td::Bits256 state_hash = state_virt_root->get_hash().bits();
-  TRY_STATUS(block::check_block_header_proof(vm::MerkleProof::virtualize(state_proof, 1), blk_id, &state_hash, true,
+  TRY_STATUS(block::check_block_header_proof(vm::MerkleProof::virtualize(state_proof), blk_id, &state_hash, true,
                                              save_utime, save_lt));
   return td::Status::OK();
 }
@@ -4205,7 +4284,7 @@ static bool visit(Ref<vm::CellSlice> cs_ref) {
 
 td::Result<Ref<vm::Cell>> TestNode::ValidatorLoadInfo::build_proof(int idx, td::Bits256* save_pubkey) const {
   try {
-    auto state_virt_root = vm::MerkleProof::virtualize(std::move(data_proof), 1);
+    auto state_virt_root = vm::MerkleProof::virtualize(std::move(data_proof));
     if (state_virt_root.is_null()) {
       return td::Status::Error("account state proof is invalid");
     }
@@ -4442,7 +4521,8 @@ td::Status TestNode::continue_check_validator_load_proof(std::unique_ptr<Validat
     if (suggested_fine.is_null()) {
       return td::Status::Error("cannot parse suggested fine");
     }
-    if (!check_punishment(interval, severe, suggested_fine, rec.suggested_fine_part, info2->config->get_config_param(40))) {
+    if (!check_punishment(interval, severe, suggested_fine, rec.suggested_fine_part,
+                          info2->config->get_config_param(40))) {
       LOG(ERROR) << "proposed punishment (fine " << td::dec_string(suggested_fine)
                  << ", fine_part=" << (double)rec.suggested_fine_part / (1LL << 32) << " is too harsh";
       show_vote(root->get_hash().bits(), false);
@@ -4536,7 +4616,7 @@ td::Status TestNode::ValidatorLoadInfo::init_check_proofs() {
     if (lt != end_lt) {
       return td::Status::Error(PSLICE() << "incorrect block logical time: declared " << end_lt << ", actual " << lt);
     }
-    auto vstate = vm::MerkleProof::virtualize(data_proof, 1);
+    auto vstate = vm::MerkleProof::virtualize(data_proof);
     if (vstate.is_null()) {
       return td::Status::Error(PSLICE() << "cannot virtualize state of block " << blk_id.to_str());
     }
@@ -4591,7 +4671,8 @@ int main(int argc, char* argv[]) {
     return (verbosity >= 0 && verbosity <= 9) ? td::Status::OK() : td::Status::Error("verbosity must be 0..9");
   });
   p.add_option('V', "version", "shows lite-client build information", [&]() {
-    std::cout << "lite-client build information: [ Commit: " << GitMetadata::CommitSHA1() << ", Date: " << GitMetadata::CommitDate() << "]\n";
+    std::cout << "lite-client build information: [ Commit: " << GitMetadata::CommitSHA1()
+              << ", Date: " << GitMetadata::CommitDate() << "]\n";
 
     std::exit(0);
   });

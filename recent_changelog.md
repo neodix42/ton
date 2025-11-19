@@ -1,12 +1,9 @@
-## 2025.04 Update
+## 2025.11 Update
 
-1. Introduced substantial improvements of CellDB performance: celldb-v2, bloom filters.
-2. Accelerated a number of intrinsic node operations: SHA256, cell operations, large boc serialization, validator set checks.
-3. [TVM version v10](./doc/GlobalVersions.md)
-4. Overlay broadcast speed up and improved network stats.
-5. Fixed some issues in tonlib
-6. [Added normalized hash](https://github.com/ton-blockchain/TEPs/pull/467)
-7. Fix SDBEGINS(Q) in Asm.fif
+1. [TVM version v12](./doc/GlobalVersions.md) update: [forbid unused high bits in extra_flags](https://github.com/ton-blockchain/TEPs/pull/503/commits/d949d70d5a69026d273cbbc07653d12c4373117a), [bounce extra_flags equal to initial message extra_flags](https://github.com/ton-blockchain/TEPs/pull/503/commits/d33ff342d69de04f1c33d11360dcf06b63a6c21e), [new TVM opcodes](https://github.com/ton-blockchain/ton/commit/ecd8fbb833c408eb34ec1aa4516e9e4344b54a22).
+2. Abseil upgrade
+3. Improvements in node synchronisation
+4. Fixing rare ArchiveManager issues
+5. Various improvements in logging, builds, DHT node behavior, private net launching, failure handlers.
 
-Besides the work of the core team, this update is based on the efforts of  @Stanislav-Povolotsky (tonlib fixes), @ice-charon (tonlib fixes), RSquad team (due payments improvements in v10), Arayz @ TonBit (improvements in RUNVM), @Skydev0h and @pyAndr3w (Asm.fif).
-
+Besides the work of the core team, this update is based on the efforts of the @Lapo4kaKek and [Vahagn x.com/vah_13](https://x.com/vah_13).

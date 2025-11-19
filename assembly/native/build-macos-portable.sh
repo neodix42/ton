@@ -65,19 +65,19 @@ else
   echo "Using compiled lz4"
 fi
 
-if [ ! -d "../3pp/libsodium" ]; then
+if [ ! -d "../3pp/libsodium-1.0.18" ]; then
   export LIBSODIUM_FULL_BUILD=1
-  git clone https://github.com/jedisct1/libsodium.git ../3pp/libsodium
-  cd ../3pp/libsodium
+  cd ../3pp
+  curl -LO https://download.libsodium.org/libsodium/releases/libsodium-1.0.18.tar.gz
+  tar -xzf libsodium-1.0.18.tar.gz
+  cd libsodium-1.0.18
   sodiumPath=`pwd`
-  git checkout 1.0.18
-  ./autogen.sh
   ./configure --with-pic --enable-static
   make -j4
   test $? -eq 0 || { echo "Can't compile libsodium"; exit 1; }
   cd ../../build
 else
-  sodiumPath=$(pwd)/../3pp/libsodium
+  sodiumPath=$(pwd)/../3pp/libsodium-1.0.18
   echo "Using compiled libsodium"
 fi
 
@@ -127,6 +127,8 @@ fi
 cmake -GNinja .. \
 -DPORTABLE=1 \
 -DCMAKE_OSX_DEPLOYMENT_TARGET:STRING=$OSX_TARGET \
+-DCMAKE_CXX_FLAGS="-stdlib=libc++" \
+-DCMAKE_SYSROOT=$(xcrun --show-sdk-path) \
 -DCMAKE_BUILD_TYPE=Release \
 -DOPENSSL_FOUND=1 \
 -DOPENSSL_INCLUDE_DIR=$opensslPath/include \
@@ -150,16 +152,16 @@ test $? -eq 0 || { echo "Can't configure ton"; exit 1; }
 if [ "$with_tests" = true ]; then
   ninja storage-daemon storage-daemon-cli blockchain-explorer   \
   tonlib tonlibjson tonlib-cli validator-engine func tolk fift \
-  lite-client validator-engine-console generate-random-id json2tlo dht-server \
+  lite-client validator-engine-console generate-random-id json2tlo dht-server dht-ping-servers dht-resolve \
   http-proxy rldp-http-proxy adnl-proxy create-state create-hardfork tlbc emulator \
   test-ed25519 test-bigint test-vm test-fift test-cells test-smartcont \
-  test-net test-tdactor test-tdutils test-tonlib-offline test-adnl test-dht test-rldp \
+  test-net test-tdactor test-coro test-tdutils test-tonlib-offline test-adnl test-dht test-rldp \
   test-rldp2 test-catchain test-fec test-tddb test-db test-validator-session-state test-emulator proxy-liteserver
   test $? -eq 0 || { echo "Can't compile ton"; exit 1; }
 else
   ninja storage-daemon storage-daemon-cli blockchain-explorer   \
   tonlib tonlibjson tonlib-cli validator-engine func tolk fift \
-  lite-client validator-engine-console generate-random-id json2tlo dht-server \
+  lite-client validator-engine-console generate-random-id json2tlo dht-server dht-ping-servers dht-resolve \
   http-proxy rldp-http-proxy adnl-proxy create-state create-hardfork tlbc emulator proxy-liteserver
   test $? -eq 0 || { echo "Can't compile ton"; exit 1; }
 fi
@@ -184,6 +186,8 @@ if [ "$with_artifacts" = true ]; then
   cp build/http/http-proxy artifacts/
   cp build/rldp-http-proxy/rldp-http-proxy artifacts/
   cp build/dht-server/dht-server artifacts/
+  cp build/dht/dht-ping-servers artifacts/
+  cp build/dht/dht-resolve artifacts/
   cp build/lite-client/lite-client artifacts/
   cp build/validator-engine/validator-engine artifacts/
   cp build/utils/generate-random-id artifacts/

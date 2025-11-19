@@ -16,15 +16,16 @@
 
     Copyright 2017-2020 Telegram Systems LLP
 */
-#include "vm/dispatch.h"
+#include <sodium.h>
+
 #include "vm/continuation.h"
 #include "vm/dict.h"
+#include "vm/dispatch.h"
 #include "vm/log.h"
 #include "vm/vm.h"
+
 #include "cp0.h"
 #include "memo.h"
-
-#include <sodium.h>
 
 namespace vm {
 
@@ -450,7 +451,8 @@ int VmState::step() {
   }
   ++steps;
   if (code->size()) {
-    VM_LOG_MASK(this, vm::VmLog::ExecLocation) << "code cell hash: " << code->get_base_cell()->get_hash().to_hex() << " offset: " << code->cur_pos();
+    VM_LOG_MASK(this, vm::VmLog::ExecLocation)
+        << "code cell hash: " << code->get_base_cell()->get_hash().to_hex() << " offset: " << code->cur_pos();
     return dispatch->dispatch(this, code.write());
   } else if (code->size_refs()) {
     VM_LOG(this) << "execute implicit JMPREF";
@@ -515,7 +517,7 @@ int VmState::run() {
         restore_parent_vm(~res);
       }
       res = run_inner();
-    } catch (VmNoGas &vmoog) {
+    } catch (VmNoGas& vmoog) {
       ++steps;
       VM_LOG(this) << "unhandled out-of-gas exception: gas consumed=" << gas.gas_consumed()
                    << ", limit=" << gas.gas_limit;
@@ -785,11 +787,20 @@ void VmState::restore_parent_vm(int res) {
     cur_stack.push(std::move(child_state.stack->at(i)));
   }
   cur_stack.push_smallint(res);
-  if (parent->return_data) {
-    cur_stack.push_cell(child_state.get_committed_state().c4);
-  }
-  if (parent->return_actions) {
-    cur_stack.push_cell(child_state.get_committed_state().c5);
+  if (global_version >= 11 && !child_state.get_committed_state().committed) {
+    if (parent->return_data) {
+      cur_stack.push_null();
+    }
+    if (parent->return_actions) {
+      cur_stack.push_null();
+    }
+  } else {
+    if (parent->return_data) {
+      cur_stack.push_cell(child_state.get_committed_state().c4);
+    }
+    if (parent->return_actions) {
+      cur_stack.push_cell(child_state.get_committed_state().c5);
+    }
   }
   if (parent->return_gas) {
     cur_stack.push_smallint(child_state.gas.gas_consumed());

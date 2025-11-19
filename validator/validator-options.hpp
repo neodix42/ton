@@ -34,7 +34,8 @@ struct ValidatorManagerOptionsImpl : public ValidatorManagerOptions {
   }
   bool need_monitor(ShardIdFull shard, const td::Ref<MasterchainState>& state) const override {
     td::uint32 min_split = state->monitor_min_split_depth(shard.workchain);
-    return check_shard_((td::uint32)shard.pfx_len() <= min_split ? shard : shard_prefix(shard, min_split));
+    return check_shard_((td::uint32)shard.pfx_len() <= min_split ? shard : shard_prefix(shard, min_split),
+                        state->get_seqno());
   }
   bool allow_blockchain_init() const override {
     return allow_blockchain_init_;
@@ -157,11 +158,23 @@ struct ValidatorManagerOptionsImpl : public ValidatorManagerOptions {
   td::Ref<CollatorOptions> get_collator_options() const override {
     return collator_options_;
   }
-  bool get_fast_state_serializer_enabled() const override {
-    return fast_state_serializer_enabled_;
-  }
   double get_catchain_broadcast_speed_multiplier() const override {
     return catchain_broadcast_speed_multipliers_;
+  }
+  bool get_permanent_celldb() const override {
+    return permanent_celldb_;
+  }
+  td::Ref<CollatorsList> get_collators_list() const override {
+    return collators_list_;
+  }
+  bool check_collator_node_whitelist(adnl::AdnlNodeIdShort id) const override {
+    return !collator_node_whitelist_enabled_ || collator_node_whitelist_.contains(id);
+  }
+  td::Ref<ShardBlockVerifierConfig> get_shard_block_verifier_config() const override {
+    return shard_block_verifier_config_;
+  }
+  bool get_parallel_validation() const override {
+    return parallel_validation;
   }
 
   void set_zero_block_id(BlockIdExt block_id) override {
@@ -170,7 +183,7 @@ struct ValidatorManagerOptionsImpl : public ValidatorManagerOptions {
   void set_init_block_id(BlockIdExt block_id) override {
     init_block_id_ = block_id;
   }
-  void set_shard_check_function(std::function<bool(ShardIdFull)> check_shard) override {
+  void set_shard_check_function(std::function<bool(ShardIdFull, BlockSeqno)> check_shard) override {
     check_shard_ = std::move(check_shard);
   }
   void set_allow_blockchain_init(bool value) override {
@@ -204,7 +217,8 @@ struct ValidatorManagerOptionsImpl : public ValidatorManagerOptions {
     unsafe_catchains_.insert(seqno);
   }
   void add_unsafe_catchain_rotate(BlockSeqno seqno, CatchainSeqno cc_seqno, td::uint32 value) override {
-    VLOG(INFO) << "Add unsafe catchain rotation: Master block seqno " << seqno<<" Catchain seqno " << cc_seqno << " New value "<< value;
+    VLOG(INFO) << "Add unsafe catchain rotation: Master block seqno " << seqno << " Catchain seqno " << cc_seqno
+               << " New value " << value;
     unsafe_catchain_rotates_[cc_seqno] = std::make_pair(seqno, value);
   }
   void truncate_db(BlockSeqno seqno) override {
@@ -261,24 +275,42 @@ struct ValidatorManagerOptionsImpl : public ValidatorManagerOptions {
   void set_collator_options(td::Ref<CollatorOptions> value) override {
     collator_options_ = std::move(value);
   }
-  void set_fast_state_serializer_enabled(bool value) override {
-    fast_state_serializer_enabled_ = value;
-  }
   void set_catchain_broadcast_speed_multiplier(double value) override {
     catchain_broadcast_speed_multipliers_ = value;
   }
+  void set_permanent_celldb(bool value) override {
+    permanent_celldb_ = value;
+  }
+  void set_collators_list(td::Ref<CollatorsList> list) override {
+    collators_list_ = std::move(list);
+  }
+  void set_collator_node_whitelisted_validator(adnl::AdnlNodeIdShort id, bool add) override {
+    if (add) {
+      collator_node_whitelist_.insert(id);
+    } else {
+      collator_node_whitelist_.erase(id);
+    }
+  }
+  void set_collator_node_whitelist_enabled(bool enabled) override {
+    collator_node_whitelist_enabled_ = enabled;
+  }
+  void set_shard_block_verifier_config(td::Ref<ShardBlockVerifierConfig> config) override {
+    shard_block_verifier_config_ = std::move(config);
+  }
 
-  ValidatorManagerOptionsImpl *make_copy() const override {
+  void set_parallel_validation(bool value) override {
+    parallel_validation = value;
+  }
+
+  ValidatorManagerOptionsImpl* make_copy() const override {
     return new ValidatorManagerOptionsImpl(*this);
   }
 
-  ValidatorManagerOptionsImpl(BlockIdExt zero_block_id, BlockIdExt init_block_id,
-                              std::function<bool(ShardIdFull)> check_shard, bool allow_blockchain_init,
+  ValidatorManagerOptionsImpl(BlockIdExt zero_block_id, BlockIdExt init_block_id, bool allow_blockchain_init,
                               double sync_blocks_before, double block_ttl, double state_ttl, double max_mempool_num,
                               double archive_ttl, double key_proof_ttl, bool initial_sync_disabled)
       : zero_block_id_(zero_block_id)
       , init_block_id_(init_block_id)
-      , check_shard_(std::move(check_shard))
       , allow_blockchain_init_(allow_blockchain_init)
       , sync_blocks_before_(sync_blocks_before)
       , block_ttl_(block_ttl)
@@ -292,7 +324,7 @@ struct ValidatorManagerOptionsImpl : public ValidatorManagerOptions {
  private:
   BlockIdExt zero_block_id_;
   BlockIdExt init_block_id_;
-  std::function<bool(ShardIdFull)> check_shard_;
+  std::function<bool(ShardIdFull, BlockSeqno)> check_shard_ = [](ShardIdFull, BlockSeqno) { return true; };
   bool allow_blockchain_init_;
   double sync_blocks_before_;
   double block_ttl_;
@@ -321,8 +353,13 @@ struct ValidatorManagerOptionsImpl : public ValidatorManagerOptions {
   td::optional<double> catchain_max_block_delay_, catchain_max_block_delay_slow_;
   bool state_serializer_enabled_ = true;
   td::Ref<CollatorOptions> collator_options_{true};
-  bool fast_state_serializer_enabled_ = false;
   double catchain_broadcast_speed_multipliers_;
+  bool permanent_celldb_ = false;
+  td::Ref<CollatorsList> collators_list_{true, CollatorsList::default_list()};
+  std::set<adnl::AdnlNodeIdShort> collator_node_whitelist_;
+  bool collator_node_whitelist_enabled_ = false;
+  td::Ref<ShardBlockVerifierConfig> shard_block_verifier_config_{true};
+  bool parallel_validation = false;
 };
 
 }  // namespace validator
