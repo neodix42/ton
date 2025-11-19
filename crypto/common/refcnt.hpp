@@ -18,10 +18,10 @@
 */
 #pragma once
 
-#include <cassert>
-#include <utility>
 #include <atomic>
+#include <cassert>
 #include <iostream>
+#include <utility>
 
 #include "td/utils/StringBuilder.h"
 #include "td/utils/logging.h"
@@ -472,5 +472,6 @@ template <class T>
 void swap(Ref<T>& r1, Ref<T>& r2) {
   r1.swap(r2);
 }
+int64 ref_get_delete_count();
 
 }  // namespace td

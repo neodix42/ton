@@ -25,38 +25,33 @@
 
     Copyright 2019-2020 Telegram Systems LLP
 */
-#include "http/http-server.h"
-#include "http/http-client.h"
-
-#include "td/utils/port/signals.h"
-#include "td/utils/OptionParser.h"
-#include "td/utils/FileLog.h"
-#include "td/utils/Random.h"
-#include "td/utils/filesystem.h"
-
-#include "auto/tl/ton_api_json.h"
-#include "auto/tl/tonlib_api.hpp"
-
-#include "td/actor/MultiPromise.h"
-
-#include "common/errorcode.h"
-
-#include "tonlib/tonlib/TonlibClient.h"
-
-#include "adnl/adnl.h"
-#include "rldp/rldp.h"
-#include "rldp2/rldp.h"
-#include "dht/dht.h"
-
 #include <algorithm>
 #include <list>
 #include <set>
-#include "git.h"
-#include "td/utils/BufferedFd.h"
-#include "common/delay.h"
 
+#include "adnl/adnl.h"
+#include "auto/tl/ton_api_json.h"
+#include "auto/tl/tonlib_api.hpp"
+#include "common/delay.h"
+#include "common/errorcode.h"
+#include "dht/dht.h"
+#include "http/http-client.h"
+#include "http/http-server.h"
+#include "rldp/rldp.h"
+#include "rldp2/rldp.h"
+#include "td/actor/MultiPromise.h"
+#include "td/utils/BufferedFd.h"
+#include "td/utils/FileLog.h"
+#include "td/utils/OptionParser.h"
+#include "td/utils/Random.h"
+#include "td/utils/filesystem.h"
+#include "td/utils/port/path.h"
+#include "td/utils/port/signals.h"
+#include "tonlib/tonlib/TonlibClient.h"
 #include "tonlib/tonlib/TonlibClientWrapper.h"
+
 #include "DNSResolver.h"
+#include "git.h"
 
 #if TD_DARWIN || TD_LINUX
 #include <unistd.h>
@@ -920,6 +915,12 @@ class RldpHttpProxy : public td::actor::Actor {
   }
 
   void run() {
+    if (!db_root_.empty()) {
+      td::mkpath(db_root_ + "/").ensure();
+    } else if (!is_client_) {
+      LOG(ERROR) << "DB root is required for server proxy";
+      std::_Exit(2);
+    }
     keyring_ = ton::keyring::Keyring::create(is_client_ ? std::string("") : (db_root_ + "/keyring"));
     {
       auto S = load_global_config();
@@ -955,9 +956,16 @@ class RldpHttpProxy : public td::actor::Actor {
     auto conf_dataR = td::read_file(global_config_);
     conf_dataR.ensure();
 
+    ton::tl_object_ptr<tonlib_api::KeyStoreType> key_store;
+    if (db_root_.empty()) {
+      key_store = tonlib_api::make_object<tonlib_api::keyStoreTypeInMemory>();
+    } else {
+      td::mkpath(db_root_ + "/tonlib-cache/").ensure();
+      key_store = tonlib_api::make_object<tonlib_api::keyStoreTypeDirectory>(db_root_ + "/tonlib-cache/");
+    }
     auto tonlib_options = tonlib_api::make_object<tonlib_api::options>(
         tonlib_api::make_object<tonlib_api::config>(conf_dataR.move_as_ok().as_slice().str(), "", false, false),
-        tonlib_api::make_object<tonlib_api::keyStoreTypeInMemory>());
+        std::move(key_store));
     tonlib_client_ = td::actor::create_actor<tonlib::TonlibClientWrapper>("tonlibclient", std::move(tonlib_options));
     dns_resolver_ = td::actor::create_actor<DNSResolver>("dnsresolver", tonlib_client_.get());
   }

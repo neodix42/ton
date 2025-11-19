@@ -26,16 +26,23 @@ namespace validator {
 
 class WaitBlockState : public td::actor::Actor {
  public:
-  WaitBlockState(BlockHandle handle, td::uint32 priority, td::actor::ActorId<ValidatorManager> manager,
-                 td::Timestamp timeout, td::Promise<td::Ref<ShardState>> promise)
+  WaitBlockState(BlockHandle handle, td::uint32 priority, td::Ref<ValidatorManagerOptions> opts,
+                 td::Ref<MasterchainState> last_masterchain_state, td::actor::ActorId<ValidatorManager> manager,
+                 td::Timestamp timeout, td::Promise<td::Ref<ShardState>> promise_no_store,
+                 td::Promise<td::Ref<ShardState>> promise_final,
+                 td::Ref<PersistentStateDescription> persistent_state_desc = {})
       : handle_(std::move(handle))
       , priority_(priority)
+      , opts_(opts)
+      , last_masterchain_state_(last_masterchain_state)
       , manager_(manager)
       , timeout_(timeout)
-      , promise_(std::move(promise))
+      , promise_no_store_(std::move(promise_no_store))
+      , promise_final_(std::move(promise_final))
+      , persistent_state_desc_(std::move(persistent_state_desc))
       , perf_timer_("waitstate", 1.0, [manager](double duration) {
-          send_closure(manager, &ValidatorManager::add_perf_timer_stat, "waitstate", duration);
-        }) {
+        send_closure(manager, &ValidatorManager::add_perf_timer_stat, "waitstate", duration);
+      }) {
   }
 
   void abort_query(td::Status reason);
@@ -45,11 +52,9 @@ class WaitBlockState : public td::actor::Actor {
   void force_read_from_db();
 
   void start_up() override;
-  void got_block_handle(BlockHandle handle);
   void start();
   void got_state_from_db(td::Ref<ShardState> data);
   void got_state_from_static_file(td::Ref<ShardState> state, td::BufferSlice data);
-  void failed_to_get_state_from_db(td::Status reason);
   void got_prev_state(td::Ref<ShardState> state);
   void failed_to_get_prev_state(td::Status reason);
   void got_block_data(td::Ref<BlockData> data);
@@ -68,22 +73,52 @@ class WaitBlockState : public td::actor::Actor {
     priority_ = priority;
   }
 
+  // These two methods can be called from ValidatorManagerImpl::written_handle
+  void after_get_proof_link() {
+    if (!waiting_proof_link_) {
+      return;
+    }
+    waiting_proof_link_ = false;
+    start();
+  }
+  void after_get_proof() {
+    if (!waiting_proof_) {
+      return;
+    }
+    waiting_proof_ = false;
+    start();
+  }
+
  private:
   BlockHandle handle_;
 
   td::uint32 priority_;
 
+  td::Ref<ValidatorManagerOptions> opts_;
+  td::Ref<MasterchainState> last_masterchain_state_;
   td::actor::ActorId<ValidatorManager> manager_;
   td::Timestamp timeout_;
-  td::Promise<td::Ref<ShardState>> promise_;
+  td::Promise<td::Ref<ShardState>> promise_no_store_;
+  td::Promise<td::Ref<ShardState>> promise_final_;
+  td::Ref<PersistentStateDescription> persistent_state_desc_;
 
   td::Ref<ShardState> prev_state_;
   td::Ref<BlockData> block_;
 
   bool reading_from_db_ = false;
+  bool waiting_proof_link_ = false;
+  bool waiting_proof_ = false;
   td::Timestamp next_static_file_attempt_;
 
-  td::PerfWarningTimer perf_timer_;
+  td::PerfWarningTimer perf_timer_{"waitstate", 1.0};
+
+  bool check_persistent_state_desc() const {
+    if (persistent_state_desc_.is_null()) {
+      return false;
+    }
+    auto now = (UnixTime)td::Clocks::system();
+    return persistent_state_desc_->end_time > now + 3600 && persistent_state_desc_->start_time < now - 6 * 3600;
+  }
 };
 
 }  // namespace validator

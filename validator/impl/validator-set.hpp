@@ -18,13 +18,13 @@
 */
 #pragma once
 
-#include "validator/interfaces/validator-set.h"
-#include "validator/interfaces/signature-set.h"
-#include "ton/ton-types.h"
-#include "keys/encryptor.h"
-#include "block/mc-config.h"
-
 #include <map>
+
+#include "block/mc-config.h"
+#include "keys/encryptor.h"
+#include "ton/ton-types.h"
+#include "validator/interfaces/signature-set.h"
+#include "validator/interfaces/validator-set.h"
 
 namespace ton {
 
@@ -32,6 +32,7 @@ namespace validator {
 
 class ValidatorSetQ : public ValidatorSet {
  public:
+  const ValidatorDescr* get_validator(const NodeIdShort& id) const override;
   bool is_validator(NodeIdShort id) const override;
   CatchainSeqno get_catchain_seqno() const override {
     return cc_seqno_;
@@ -62,8 +63,6 @@ class ValidatorSetQ : public ValidatorSet {
   ValidatorWeight total_weight_;
   std::vector<ValidatorDescr> ids_;
   std::vector<std::pair<NodeIdShort, size_t>> ids_map_;
-
-  const ValidatorDescr* find_validator(const NodeIdShort& id) const;
 };
 
 class ValidatorSetCompute {
@@ -75,7 +74,7 @@ class ValidatorSetCompute {
 
  private:
   const block::Config* config_{nullptr};
-  std::unique_ptr<block::ValidatorSet> cur_validators_, next_validators_;
+  std::shared_ptr<block::ValidatorSet> cur_validators_, next_validators_;
   td::Ref<ValidatorSet> compute_validator_set(ShardIdFull shard, const block::ValidatorSet& vset, UnixTime time,
                                               CatchainSeqno seqno) const;
 };

@@ -17,35 +17,31 @@
     Copyright 2017-2020 Telegram Systems LLP
 */
 
-#include "block/block.h"
-#include "block/block-auto.h"
-#include "block/mc-config.h"
-
-#include "vm/cells.h"
-#include "vm/boc.h"
-#include "vm/cells/CellString.h"
-
-#include "tonlib/utils.h"
-#include "tonlib/TonlibClient.h"
-#include "tonlib/Client.h"
-
 #include "auto/tl/ton_api_json.h"
 #include "auto/tl/tonlib_api_json.h"
-
+#include "block/block-auto.h"
+#include "block/block.h"
+#include "block/mc-config.h"
+#include "td/utils/PathView.h"
 #include "td/utils/benchmark.h"
 #include "td/utils/filesystem.h"
 #include "td/utils/optional.h"
 #include "td/utils/overloaded.h"
 #include "td/utils/port/path.h"
-#include "td/utils/PathView.h"
 #include "td/utils/tests.h"
+#include "tonlib/Client.h"
+#include "tonlib/TonlibClient.h"
+#include "tonlib/utils.h"
+#include "vm/boc.h"
+#include "vm/cells.h"
+#include "vm/cells/CellString.h"
 
 // KeyManager
-#include "tonlib/keys/bip39.h"
 #include "tonlib/keys/DecryptedKey.h"
 #include "tonlib/keys/EncryptedKey.h"
 #include "tonlib/keys/Mnemonic.h"
 #include "tonlib/keys/SimpleEncryption.h"
+#include "tonlib/keys/bip39.h"
 
 TEST(Tonlib, CellString) {
   for (unsigned size :
@@ -83,7 +79,7 @@ using namespace tonlib;
 TEST(Tonlib, PublicKey) {
   block::PublicKey::parse("pubjns2gp7DGCnEH7EOWeCnb6Lw1akm538YYaz6sdLVHfRB2").ensure_error();
   auto key = block::PublicKey::parse("Pubjns2gp7DGCnEH7EOWeCnb6Lw1akm538YYaz6sdLVHfRB2").move_as_ok();
-  CHECK(td::buffer_to_hex(key.key) == "3EE9DC0A7A0B6CA01770CE34698792BD8ECB53A6949BFD6C81B6E3CA475B74D7");
+  CHECK(td::buffer_to_hex(key.key) == "E39ECDA0A7B0C60A7107EC43967829DBE8BC356A49B9DFC6186B3EAC74B5477D");
   CHECK(key.serialize() == "Pubjns2gp7DGCnEH7EOWeCnb6Lw1akm538YYaz6sdLVHfRB2");
 }
 
@@ -333,8 +329,8 @@ TEST(Tonlib, ConfigParseBug) {
   unsigned char buff[128];
   int bits = (int)td::bitstring::parse_bitstring_hex_literal(buff, sizeof(buff), literal.begin(), literal.end());
   CHECK(bits >= 0);
-  auto slice = vm::CellBuilder().store_bits(td::ConstBitPtr{buff}, bits).finalize();
-  block::Config::do_get_gas_limits_prices(std::move(slice), 21).ensure();
+  auto cell = vm::CellBuilder().store_bits(td::ConstBitPtr{buff}, bits).finalize();
+  block::Config::do_get_gas_limits_prices(vm::load_cell_slice(cell), 21).ensure();
 }
 
 TEST(Tonlib, EncryptionApi) {
@@ -467,15 +463,20 @@ TEST(Tonlib, KeysApi) {
             make_object<tonlib_api::deleteKey>(make_object<tonlib_api::key>(key->public_key_, key->secret_.copy())))
       .move_as_ok();
 
-  auto err1 = sync_send(client, make_object<tonlib_api::importKey>(
-                                    new_local_password.copy(), td::SecureString("wrong password"),
-                                    make_object<tonlib_api::exportedKey>(copy_word_list())))
-                  .move_as_error();
+  auto err1 = sync_send(
+      client, make_object<tonlib_api::importKey>(new_local_password.copy(), td::SecureString("wrong password"),
+                                                 make_object<tonlib_api::exportedKey>(copy_word_list())));
+  if (err1.is_ok()) {
+    if (err1.ok()->public_key_ != key->public_key_) {
+      err1 = td::Status::Error("imported key successfully, but the public key is different");
+    }
+  }
+  err1.ensure_error();
   auto err2 =
       sync_send(client, make_object<tonlib_api::importKey>(new_local_password.copy(), td::SecureString(),
-                                                           make_object<tonlib_api::exportedKey>(copy_word_list())))
-          .move_as_error();
-  LOG(INFO) << err1 << " | " << err2;
+                                                           make_object<tonlib_api::exportedKey>(copy_word_list())));
+  err2.ensure_error();
+  LOG(INFO) << err1.move_as_error() << " | " << err2.move_as_error();
   auto imported_key =
       sync_send(client, make_object<tonlib_api::importKey>(new_local_password.copy(), mnemonic_password.copy(),
                                                            make_object<tonlib_api::exportedKey>(copy_word_list())))
@@ -654,11 +655,12 @@ TEST(Tonlib, ConfigCache) {
     ],
     "validator": {
       "@type": "validator.config.global",
-      "zero_state": {
+      "init_block": {
         "workchain": -1,
         "shard": -9223372036854775808,
         "seqno": 0,
         "file_hash": "eh9yveSz1qMdJ7mOsO+I+H77jkLr9NpAuEkoJuseXBo="
+        "root_hash": "ZXSXxDHhTALFxReyTZRd8E4Ya3ySOmpOWAS4rBX9XBY=",
       }
     }
   })abc";
@@ -683,7 +685,7 @@ TEST(Tonlib, ConfigCache) {
   sync_send(client, make_object<tonlib_api::options_setConfig>(
                         make_object<tonlib_api::config>(testnet, "testnet", true, false)))
       .ensure();
-  sync_send(client, make_object<tonlib_api::options_setConfig>(
-                        make_object<tonlib_api::config>(custom, "testnet", true, false)))
+  sync_send(client,
+            make_object<tonlib_api::options_setConfig>(make_object<tonlib_api::config>(custom, "testnet", true, false)))
       .ensure_error();
 }

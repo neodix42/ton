@@ -25,30 +25,29 @@
 
     Copyright 2017-2020 Telegram Systems LLP
 */
+#include "adnl/adnl-test-loopback-implementation.h"
 #include "adnl/adnl.h"
 #include "adnl/utils.hpp"
-#include "adnl/adnl-test-loopback-implementation.h"
+#include "catchain/catchain.h"
+#include "common/errorlog.h"
 #include "dht/dht.h"
 #include "overlay/overlays.h"
 #include "td/utils/OptionParser.h"
+#include "td/utils/Random.h"
 #include "td/utils/Time.h"
 #include "td/utils/filesystem.h"
 #include "td/utils/format.h"
-#include "td/utils/port/path.h"
-#include "td/utils/Random.h"
-#include "td/utils/port/signals.h"
-#include "td/utils/port/FileFd.h"
 #include "td/utils/overloaded.h"
-#include "catchain/catchain.h"
-#include "common/errorlog.h"
+#include "td/utils/port/FileFd.h"
+#include "td/utils/port/path.h"
+#include "td/utils/port/signals.h"
 
 #if TD_DARWIN || TD_LINUX
 #include <unistd.h>
 #endif
 #include <iostream>
-#include <sstream>
-
 #include <set>
+#include <sstream>
 
 struct Node {
   ton::PublicKeyHash id;
@@ -186,6 +185,7 @@ class CatChainInst : public td::actor::Actor {
 
   void create_fork() {
     auto height = height_ - 1;  //td::Random::fast(0, height_ - 1);
+    LOG(WARNING) << "Creating fork, source_id=" << idx_ << ", height=" << height;
 
     auto sum = prev_values_[height] + 1;
     td::uint64 x[2];
@@ -241,7 +241,8 @@ int main(int argc, char *argv[]) {
     td::actor::send_closure(adnl, &ton::adnl::Adnl::register_network_manager, network_manager.get());
   });
 
-  for (td::uint32 att = 0; att < 10; att++) {
+  for (td::uint32 att = 0; att < 20; att++) {
+    LOG(WARNING) << "Test #" << att;
     nodes.resize(total_nodes);
 
     scheduler.run_in_context([&] {
@@ -296,7 +297,10 @@ int main(int argc, char *argv[]) {
       std::cout << "value=" << n.get_actor_unsafe().value() << std::endl;
     }
 
-    scheduler.run_in_context([&] { td::actor::send_closure(inst[0], &CatChainInst::create_fork); });
+    td::uint32 fork_cnt = att < 10 ? 1 : (att - 10) / 5 + 2;
+    for (td::uint32 idx = 0; idx < fork_cnt; ++idx) {
+      scheduler.run_in_context([&] { td::actor::send_closure(inst[idx], &CatChainInst::create_fork); });
+    }
 
     t = td::Timestamp::in(1.0);
     while (scheduler.run(1)) {

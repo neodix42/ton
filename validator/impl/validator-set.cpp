@@ -16,26 +16,27 @@
 
     Copyright 2017-2020 Telegram Systems LLP
 */
-#include "validator-set.hpp"
 #include "auto/tl/ton_api.h"
-// #include "adnl/utils.hpp"
-#include "block/block.h"
 
+#include "validator-set.hpp"
+// #include "adnl/utils.hpp"
 #include <set>
+
+#include "block/block.h"
 
 namespace ton {
 
 namespace validator {
 using td::Ref;
 
-const ValidatorDescr *ValidatorSetQ::find_validator(const NodeIdShort &id) const {
+const ValidatorDescr *ValidatorSetQ::get_validator(const NodeIdShort &id) const {
   auto it =
       std::lower_bound(ids_map_.begin(), ids_map_.end(), id, [](const auto &p, const auto &x) { return p.first < x; });
   return it < ids_map_.end() && it->first == id ? &ids_[it->second] : nullptr;
 }
 
 bool ValidatorSetQ::is_validator(NodeIdShort id) const {
-  return find_validator(id);
+  return get_validator(id);
 }
 
 td::Result<ValidatorWeight> ValidatorSetQ::check_signatures(RootHash root_hash, FileHash file_hash,
@@ -53,7 +54,7 @@ td::Result<ValidatorWeight> ValidatorSetQ::check_signatures(RootHash root_hash, 
     }
     nodes.insert(sig.node);
 
-    auto vdescr = find_validator(sig.node);
+    auto vdescr = get_validator(sig.node);
     if (!vdescr) {
       return td::Status::Error(ErrorCode::protoviolation, "unknown node to sign");
     }
@@ -84,7 +85,7 @@ td::Result<ValidatorWeight> ValidatorSetQ::check_approve_signatures(RootHash roo
     }
     nodes.insert(sig.node);
 
-    auto vdescr = find_validator(sig.node);
+    auto vdescr = get_validator(sig.node);
     if (!vdescr) {
       return td::Status::Error(ErrorCode::protoviolation, "unknown node to sign");
     }

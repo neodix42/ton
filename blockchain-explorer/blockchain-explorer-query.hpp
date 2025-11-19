@@ -27,14 +27,14 @@
 */
 #pragma once
 
+#include <map>
+#include <microhttpd.h>
+
+#include "block/block.h"
 #include "td/actor/actor.h"
 #include "ton/ton-types.h"
-#include "block/block.h"
+
 #include "blockchain-explorer.hpp"
-
-#include <map>
-
-#include <microhttpd.h>
 
 td::Result<ton::BlockIdExt> parse_block_id(std::map<std::string, std::string> &opts, bool allow_empty = false);
 td::Result<block::StdAddress> parse_account_addr(std::map<std::string, std::string> &opts);
@@ -311,22 +311,14 @@ class HttpQueryRunMethod : public HttpQueryCommon {
                      std::vector<vm::StackEntry> params, std::string prefix, td::Promise<MHD_Response *> promise);
   HttpQueryRunMethod(std::map<std::string, std::string> opts, std::string prefix, td::Promise<MHD_Response *> promise);
 
-  void finish_query();
-
   void start_up_query() override;
-  void got_account(td::BufferSlice result);
+  void got_result(td::BufferSlice result);
 
  private:
   ton::BlockIdExt block_id_;
   block::StdAddress addr_;
-
   std::string method_name_;
   std::vector<vm::StackEntry> params_;
-
-  td::BufferSlice data_;
-  td::BufferSlice proof_;
-  td::BufferSlice shard_proof_;
-  ton::BlockIdExt res_block_id_;
 };
 
 class HttpQueryStatus : public HttpQueryCommon {
@@ -342,4 +334,3 @@ class HttpQueryStatus : public HttpQueryCommon {
  private:
   CoreActorInterface::RemoteNodeStatusList results_;
 };
-

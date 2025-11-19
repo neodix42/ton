@@ -17,10 +17,10 @@
     Copyright 2017-2020 Telegram Systems LLP
 */
 #pragma once
+#include "common/global-version.h"
 #include "common/refcnt.hpp"
-#include "vm/cells.h"
-
 #include "td/utils/Context.h"
+#include "vm/cells.h"
 
 namespace vm {
 using td::Ref;
@@ -32,12 +32,15 @@ class VmStateInterface : public td::Context<VmStateInterface> {
       td::ConstBitPtr hash) {  // may throw a dictionary exception; returns nullptr if library is not found
     return {};
   }
-  virtual void register_cell_load(const CellHash& cell_hash){};
-  virtual void register_cell_create(){};
-  virtual void register_new_cell(Ref<DataCell>& cell){};
+  virtual void register_cell_load(const CellHash& cell_hash) {};
+  virtual void register_cell_create() {};
+  virtual void register_new_cell(Ref<DataCell>& cell) {};
   virtual bool register_op(int op_units = 1) {
     return true;
   };
+  virtual int get_global_version() const {
+    return ton::SUPPORTED_VERSION;
+  }
 };
 
 }  // namespace vm

@@ -134,34 +134,32 @@ bool OutputQueueMerger::MsgKeyValue::split(MsgKeyValue& second) {
   return true;
 }
 
-bool OutputQueueMerger::add_root(int src, Ref<vm::Cell> outmsg_root) {
+void OutputQueueMerger::add_root(int src, Ref<vm::Cell> outmsg_root, td::int32 msg_limit) {
   if (outmsg_root.is_null()) {
-    return true;
+    return;
   }
-  //block::gen::HashmapAug{352, block::gen::t_EnqueuedMsg, block::gen::t_uint64}.print_ref(std::cerr, outmsg_root);
   auto kv = std::make_unique<MsgKeyValue>(src, std::move(outmsg_root));
   if (kv->replace_by_prefix(common_pfx.cbits(), common_pfx_len)) {
     heap.push_back(std::move(kv));
   }
-  return true;
+  if ((int)src_remaining_msgs_.size() < src + 1) {
+    src_remaining_msgs_.resize(src + 1);
+  }
+  src_remaining_msgs_[src] = msg_limit;
 }
 
-OutputQueueMerger::OutputQueueMerger(ton::ShardIdFull _queue_for, std::vector<block::McShardDescr> _neighbors)
-    : queue_for(_queue_for), neighbors(std::move(_neighbors)), eof(false), failed(false) {
-  init();
-}
-
-void OutputQueueMerger::init() {
+OutputQueueMerger::OutputQueueMerger(ton::ShardIdFull queue_for, std::vector<OutputQueueMerger::Neighbor> neighbors)
+    : eof(false), failed(false) {
   common_pfx.bits().store_int(queue_for.workchain, 32);
   int l = queue_for.pfx_len();
   td::bitstring::bits_store_long_top(common_pfx.bits() + 32, queue_for.shard, l);
   common_pfx_len = 32 + l;
   int i = 0;
-  for (block::McShardDescr& neighbor : neighbors) {
-    if (!neighbor.is_disabled()) {
-      LOG(DEBUG) << "adding " << (neighbor.outmsg_root.is_null() ? "" : "non-") << "empty output queue for neighbor #"
-                 << i << " (" << neighbor.blk_.to_str() << ")";
-      add_root(i++, neighbor.outmsg_root);
+  for (Neighbor& neighbor : neighbors) {
+    if (!neighbor.disabled_) {
+      LOG(DEBUG) << "adding " << (neighbor.outmsg_root_.is_null() ? "" : "non-") << "empty output queue for neighbor #"
+                 << i << " (" << neighbor.block_id_.to_str() << ")";
+      add_root(i++, neighbor.outmsg_root_, neighbor.msg_limit_);
     } else {
       LOG(DEBUG) << "skipping output queue for disabled neighbor #" << i;
       i++;
@@ -215,7 +213,18 @@ bool OutputQueueMerger::load() {
     heap.pop_back();
   } while (!heap.empty() && heap[0]->lt <= lt);
   std::sort(msg_list.begin() + orig_size, msg_list.end(), MsgKeyValue::less);
-  return true;
+  for (size_t i = orig_size; i < msg_list.size(); ++i) {
+    td::int32& remaining = src_remaining_msgs_[msg_list[i]->source];
+    if (remaining != -1) {
+      if (remaining == 0) {
+        limit_exceeded = true;
+      } else {
+        --remaining;
+      }
+    }
+    msg_list[i]->limit_exceeded = limit_exceeded;
+  }
+  return msg_list.size() > orig_size;
 }
 
 }  // namespace block

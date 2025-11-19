@@ -18,10 +18,11 @@
 */
 #pragma once
 
-#include "validator-full-id.h"
-#include "signature-set.h"
-#include "ton/ton-types.h"
 #include "adnl/adnl-node-id.hpp"
+#include "ton/ton-types.h"
+
+#include "signature-set.h"
+#include "validator-full-id.h"
 
 namespace ton {
 
@@ -30,6 +31,7 @@ namespace validator {
 class ValidatorSet : public td::CntObject {
  public:
   virtual ~ValidatorSet() = default;
+  virtual const ValidatorDescr* get_validator(const NodeIdShort& id) const = 0;
   virtual bool is_validator(NodeIdShort id) const = 0;
   virtual CatchainSeqno get_catchain_seqno() const = 0;
   virtual td::uint32 get_validator_set_hash() const = 0;

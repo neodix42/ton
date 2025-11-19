@@ -19,11 +19,9 @@
 #pragma once
 
 #include "auto/tl/lite_api.h"
-
-#include "tl/tl_object_parse.h"
-#include "td/utils/tl_parsers.h"
-
 #include "crypto/common/bitstring.h"
+#include "td/utils/tl_parsers.h"
+#include "tl/tl_object_parse.h"
 
 #include "common-utils.hpp"
 
@@ -46,4 +44,6 @@ template <class Tp, std::enable_if_t<std::is_base_of<lite_api::Object, Tp>::valu
 td::Bits256 get_tl_object_sha_bits256(const Tp &T) {
   return get_tl_object_sha_bits256(static_cast<const lite_api::Object *>(&T));
 }
+
+std::string lite_query_name_by_id(int id);
 }  // namespace ton

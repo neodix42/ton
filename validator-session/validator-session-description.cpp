@@ -16,10 +16,11 @@
 
     Copyright 2017-2020 Telegram Systems LLP
 */
-#include "validator-session.hpp"
 #include "td/utils/Random.h"
 #include "td/utils/crypto.h"
+
 #include "validator-session-description.hpp"
+#include "validator-session.hpp"
 
 namespace ton {
 
@@ -70,6 +71,11 @@ td::int32 ValidatorSessionDescriptionImpl::get_node_priority(td::uint32 src_idx,
 
 td::uint32 ValidatorSessionDescriptionImpl::get_max_priority() const {
   return opts_.round_candidates - 1;
+}
+
+td::uint32 ValidatorSessionDescriptionImpl::get_node_by_priority(td::uint32 round, td::uint32 priority) const {
+  CHECK(priority <= get_max_priority());
+  return (round + priority) % get_total_nodes();
 }
 
 ValidatorSessionCandidateId ValidatorSessionDescriptionImpl::candidate_id(
@@ -179,9 +185,7 @@ ValidatorSessionDescriptionImpl::MemPool::~MemPool() {
 void *ValidatorSessionDescriptionImpl::MemPool::alloc(size_t size, size_t align) {
   CHECK(align && !(align & (align - 1)));  // align should be a power of 2
   CHECK(size + align <= chunk_size_);
-  auto get_padding = [&](const uint8_t* ptr) {
-    return (-(size_t)ptr) & (align - 1);
-  };
+  auto get_padding = [&](const uint8_t *ptr) { return (-(size_t)ptr) & (align - 1); };
   while (true) {
     size_t idx = ptr_ / chunk_size_;
     if (idx < data_.size()) {
@@ -207,7 +211,7 @@ void ValidatorSessionDescriptionImpl::MemPool::clear() {
   ptr_ = 0;
 }
 
-bool ValidatorSessionDescriptionImpl::MemPool::contains(const void* ptr) const {
+bool ValidatorSessionDescriptionImpl::MemPool::contains(const void *ptr) const {
   if (ptr == nullptr) {
     return true;
   }

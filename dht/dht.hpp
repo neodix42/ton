@@ -20,19 +20,16 @@
 
 #include <set>
 
-#include "td/utils/int_types.h"
+#include "adnl/adnl.h"
+#include "adnl/utils.hpp"
+#include "auto/tl/ton_api.hpp"
+#include "keys/encryptor.h"
 #include "td/actor/actor.h"
 #include "td/utils/List.h"
+#include "td/utils/int_types.h"
 
-#include "adnl/adnl.h"
-
-#include "adnl/utils.hpp"
-#include "keys/encryptor.h"
-
-#include "dht.h"
 #include "dht-node.hpp"
-
-#include "auto/tl/ton_api.hpp"
+#include "dht.h"
 
 namespace ton {
 
@@ -95,7 +92,7 @@ class DhtMember : public Dht {
 
   //virtual void update_addr_list(tl_object_ptr<ton_api::adnl_addressList> addr_list) = 0;
   //virtual void add_node(adnl::AdnlNodeIdShort id) = 0;
-  virtual void add_full_node(DhtKeyId id, DhtNode node) = 0;
+  virtual void add_full_node(DhtKeyId id, DhtNode node, bool set_active) = 0;
 
   virtual void receive_ping(DhtKeyId id, DhtNode result) = 0;
 

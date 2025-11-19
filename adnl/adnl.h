@@ -18,13 +18,14 @@
 */
 #pragma once
 
-#include "td/actor/actor.h"
 #include "auto/tl/ton_api.h"
-#include "td/utils/port/IPAddress.h"
-#include "adnl-node-id.hpp"
-#include "adnl-node.h"
 #include "common/errorcode.h"
 #include "keyring/keyring.h"
+#include "td/actor/actor.h"
+#include "td/utils/port/IPAddress.h"
+
+#include "adnl-node-id.hpp"
+#include "adnl-node.h"
 
 namespace ton {
 
@@ -65,9 +66,11 @@ class Adnl : public AdnlSenderInterface {
  public:
   class Callback {
    public:
-    virtual void receive_message(AdnlNodeIdShort src, AdnlNodeIdShort dst, td::BufferSlice data) = 0;
+    virtual void receive_message(AdnlNodeIdShort src, AdnlNodeIdShort dst, td::BufferSlice data) {
+    }
     virtual void receive_query(AdnlNodeIdShort src, AdnlNodeIdShort dst, td::BufferSlice data,
-                               td::Promise<td::BufferSlice> promise) = 0;
+                               td::Promise<td::BufferSlice> promise) {
+    }
     virtual ~Callback() = default;
   };
 
@@ -97,6 +100,8 @@ class Adnl : public AdnlSenderInterface {
   virtual void add_id_ex(AdnlNodeIdFull id, AdnlAddressList addr_list, td::uint8 cat, td::uint32 mode) = 0;
   virtual void del_id(AdnlNodeIdShort id, td::Promise<td::Unit> promise) = 0;
 
+  virtual void check_id_exists(AdnlNodeIdShort id, td::Promise<bool> promise) = 0;
+
   // subscribe to (some) messages(+queries) to this local id
   virtual void subscribe(AdnlNodeIdShort dst, std::string prefix, std::unique_ptr<Callback> callback) = 0;
   virtual void unsubscribe(AdnlNodeIdShort dst, std::string prefix) = 0;
@@ -118,6 +123,8 @@ class Adnl : public AdnlSenderInterface {
                                  td::Promise<td::actor::ActorOwn<AdnlExtServer>> promise) = 0;
   virtual void create_tunnel(AdnlNodeIdShort dst, td::uint32 size,
                              td::Promise<std::pair<td::actor::ActorOwn<AdnlTunnel>, AdnlAddress>> promise) = 0;
+
+  virtual void get_stats(bool all, td::Promise<tl_object_ptr<ton_api::adnl_stats>> promise) = 0;
 
   static td::actor::ActorOwn<Adnl> create(std::string db, td::actor::ActorId<keyring::Keyring> keyring);
 
