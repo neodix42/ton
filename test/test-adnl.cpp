@@ -25,20 +25,18 @@
 
     Copyright 2017-2020 Telegram Systems LLP
 */
-#include "adnl/adnl-network-manager.h"
-#include "adnl/adnl.h"
-#include "adnl/adnl-test-loopback-implementation.h"
-
-#include "keys/encryptor.h"
-
-#include "td/utils/port/signals.h"
-#include "td/utils/port/path.h"
-#include "td/utils/Random.h"
-
+#include <chrono>
 #include <memory>
 #include <set>
-#include <chrono>
 #include <thread>
+
+#include "adnl/adnl-network-manager.h"
+#include "adnl/adnl-test-loopback-implementation.h"
+#include "adnl/adnl.h"
+#include "keys/encryptor.h"
+#include "td/utils/Random.h"
+#include "td/utils/port/path.h"
+#include "td/utils/port/signals.h"
 
 int main() {
   SET_VERBOSITY_LEVEL(verbosity_INFO);
@@ -225,13 +223,19 @@ int main() {
 
   auto f = td::Clocks::system();
   scheduler.run_in_context([&] {
-    for (td::uint32 i = 1; i <= ton::adnl::Adnl::huge_packet_max_size(); i++) {
+    // Don't send too many packets
+    // Channels are disabled, so packet rate is limited
+    for (td::uint32 i : {1, 2, 3, 4, 100, 500, 900}) {
+      remaining++;
+      td::actor::send_closure(adnl, &ton::adnl::Adnl::send_message, src, dst, send_packet(i));
+    }
+    for (td::uint32 i = 1024; i <= ton::adnl::Adnl::huge_packet_max_size() /* 1024 * 8 */; i += 1024) {
       remaining++;
       td::actor::send_closure(adnl, &ton::adnl::Adnl::send_message, src, dst, send_packet(i));
     }
   });
 
-  auto t = td::Timestamp::in(320.0);
+  auto t = td::Timestamp::in(60.0);
   while (scheduler.run(1)) {
     if (!remaining) {
       break;
@@ -241,7 +245,7 @@ int main() {
     }
   }
 
-  LOG(ERROR) << "successfully tested delivering of packets of all sizes. Time=" << (td::Clocks::system() - f);
+  LOG(ERROR) << "successfully tested delivering of packets of various sizes. Time=" << (td::Clocks::system() - f);
 
   scheduler.run_in_context([&] {
     td::actor::send_closure(network_manager, &ton::adnl::TestLoopbackNetworkManager::add_node_id, src, true, true);

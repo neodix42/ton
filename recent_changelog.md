@@ -1,15 +1,9 @@
-## 2024.04 Update
+## 2025.11 Update
 
-1. Emulator: Single call optimized runGetMethod added
-2. Tonlib: a series of proof improvements, also breaking Change in `liteServer.getAllShardsInfo` method (see below)
-3. DB: usage statistics now collected, outdated persistent states are not serialized
-4. LS: fast `getOutMsgQueueSizes` added, preliminary support of non-final block requests
-5. Network: lz4 compression of block candidates (disabled by default).
+1. [TVM version v12](./doc/GlobalVersions.md) update: [forbid unused high bits in extra_flags](https://github.com/ton-blockchain/TEPs/pull/503/commits/d949d70d5a69026d273cbbc07653d12c4373117a), [bounce extra_flags equal to initial message extra_flags](https://github.com/ton-blockchain/TEPs/pull/503/commits/d33ff342d69de04f1c33d11360dcf06b63a6c21e), [new TVM opcodes](https://github.com/ton-blockchain/ton/commit/ecd8fbb833c408eb34ec1aa4516e9e4344b54a22).
+2. Abseil upgrade
+3. Improvements in node synchronisation
+4. Fixing rare ArchiveManager issues
+5. Various improvements in logging, builds, DHT node behavior, private net launching, failure handlers.
 
-
-
----
-
-* `liteServer.getAllShardsInfo` method was updated for better efficiency. Previously, field proof contained BoC with two roots: one for BlockState from block's root and another for ShardHashes from BlockState. Now, it returns a single-root proof BoC, specifically the merkle proof of ShardHashes directly from the block's root, streamlining data access and integrity. Checking of the proof requires to check that ShardHashes in the `data` correspond to ShardHashes from the block.
-
-
+Besides the work of the core team, this update is based on the efforts of the @Lapo4kaKek and [Vahagn x.com/vah_13](https://x.com/vah_13).

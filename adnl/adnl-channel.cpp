@@ -16,12 +16,12 @@
 
     Copyright 2017-2020 Telegram Systems LLP
 */
-#include "adnl-channel.hpp"
-#include "adnl-peer.h"
-#include "adnl-peer-table.h"
-
-#include "td/utils/crypto.h"
 #include "crypto/Ed25519.h"
+#include "td/utils/crypto.h"
+
+#include "adnl-channel.hpp"
+#include "adnl-peer-table.h"
+#include "adnl-peer.h"
 
 namespace ton {
 
@@ -112,16 +112,16 @@ void AdnlChannelImpl::send_message(td::uint32 priority, td::actor::ActorId<AdnlN
 }
 
 void AdnlChannelImpl::receive(td::IPAddress addr, td::BufferSlice data) {
-  auto P = td::PromiseCreator::lambda(
-      [peer = peer_pair_, channel_id = channel_in_id_, addr, id = print_id()](td::Result<AdnlPacket> R) {
-        if (R.is_error()) {
-          VLOG(ADNL_WARNING) << id << ": dropping IN message: can not decrypt: " << R.move_as_error();
-        } else {
-          auto packet = R.move_as_ok();
-          packet.set_remote_addr(addr);
-          td::actor::send_closure(peer, &AdnlPeerPair::receive_packet_from_channel, channel_id, std::move(packet));
-        }
-      });
+  auto P = td::PromiseCreator::lambda([peer = peer_pair_, channel_id = channel_in_id_, addr, id = print_id(),
+                                       size = data.size()](td::Result<AdnlPacket> R) {
+    if (R.is_error()) {
+      VLOG(ADNL_WARNING) << id << ": dropping IN message: can not decrypt: " << R.move_as_error();
+    } else {
+      auto packet = R.move_as_ok();
+      packet.set_remote_addr(addr);
+      td::actor::send_closure(peer, &AdnlPeerPair::receive_packet_from_channel, channel_id, std::move(packet), size);
+    }
+  });
 
   decrypt(std::move(data), std::move(P));
 }

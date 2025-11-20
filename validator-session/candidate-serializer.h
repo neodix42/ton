@@ -15,15 +15,24 @@
     along with TON Blockchain Library.  If not, see <http://www.gnu.org/licenses/>.
 */
 #pragma once
-#include "ton/ton-types.h"
 #include "auto/tl/ton_api.h"
+#include "ton/ton-types.h"
 
 namespace ton::validatorsession {
 
-td::Result<td::BufferSlice> serialize_candidate(const tl_object_ptr<ton_api::validatorSession_candidate> &block,
+td::Result<td::BufferSlice> serialize_candidate(const tl_object_ptr<ton_api::validatorSession_candidate>& block,
                                                 bool compression_enabled);
 td::Result<tl_object_ptr<ton_api::validatorSession_candidate>> deserialize_candidate(td::Slice data,
                                                                                      bool compression_enabled,
-                                                                                     int max_decompressed_data_size);
+                                                                                     int max_decompressed_data_size,
+                                                                                     int proto_version);
+
+td::Result<td::BufferSlice> compress_candidate_data(td::Slice block, td::Slice collated_data,
+                                                    size_t& decompressed_size);
+td::Result<std::pair<td::BufferSlice, td::BufferSlice>> decompress_candidate_data(td::Slice compressed,
+                                                                                  bool improved_compression,
+                                                                                  int decompressed_size,
+                                                                                  int max_decompressed_size,
+                                                                                  int proto_version);
 
 }  // namespace ton::validatorsession

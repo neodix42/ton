@@ -16,11 +16,12 @@
 
     Copyright 2017-2020 Telegram Systems LLP
 */
-#include "signature-set.hpp"
-#include "auto/tl/ton_api.hpp"
 #include "adnl/utils.hpp"
-#include "vm/dict.h"
+#include "auto/tl/ton_api.hpp"
 #include "vm/boc.h"
+#include "vm/dict.h"
+
+#include "signature-set.hpp"
 
 namespace ton {
 
@@ -42,9 +43,6 @@ td::BufferSlice BlockSignatureSetQ::serialize() const {
   }
   Ref<vm::Cell> root;
   CHECK(serialize_to(root));
-  //std::cerr << "serializing BlockSignatureSet: ";
-  //vm::CellSlice{vm::NoVm{}, root}.print_rec(std::cerr);
-  //std::cerr << std::endl;
   auto res = vm::std_boc_serialize(std::move(root));
   LOG_CHECK(res.is_ok()) << res.move_as_error();
   return res.move_as_ok();

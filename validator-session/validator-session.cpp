@@ -16,10 +16,12 @@
 
     Copyright 2017-2020 Telegram Systems LLP
 */
-#include "validator-session.hpp"
 #include "td/utils/Random.h"
-#include "td/utils/crypto.h"
+#include "td/utils/overloaded.h"
+#include "ton/ton-tl.hpp"
+
 #include "candidate-serializer.h"
+#include "validator-session.hpp"
 
 namespace ton {
 
@@ -40,7 +42,7 @@ void ValidatorSessionImpl::process_blocks(std::vector<catchain::CatChainBlock *>
     on_new_round(real_state_->cur_round_seqno());
   }
 
-  td::uint32 cnt = 0;
+  [[maybe_unused]] td::uint32 cnt = 0;
   auto ts = description().get_ts();
   auto att = description().get_attempt_seqno(ts);
   std::vector<tl_object_ptr<ton_api::validatorSession_round_Message>> msgs;
@@ -61,7 +63,7 @@ void ValidatorSessionImpl::process_blocks(std::vector<catchain::CatChainBlock *>
   auto to_approve = real_state_->choose_blocks_to_approve(description(), local_idx());
   for (auto &block : to_approve) {
     auto id = SentBlock::get_block_id(block);
-    if (approved_.count(id) && approved_[id].first <= td::Clocks::system()) {
+    if (approved_.contains(id) && approved_[id].first <= td::Clocks::system()) {
       msgs.emplace_back(create_tl_object<ton_api::validatorSession_message_approvedBlock>(
           cur_round_, id, approved_[id].second.clone()));
       cnt++;
@@ -86,6 +88,7 @@ void ValidatorSessionImpl::process_blocks(std::vector<catchain::CatChainBlock *>
 
   for (auto &msg : msgs) {
     VLOG(VALIDATOR_SESSION_INFO) << this << ": applying action: " << msg.get();
+    stats_process_action(local_idx(), *msg);
     real_state_ = ValidatorSessionState::action(description(), real_state_, local_idx(), att, msg.get());
   }
 
@@ -167,6 +170,7 @@ void ValidatorSessionImpl::preprocess_block(catchain::CatChainBlock *block) {
       for (auto &msg : B->actions_) {
         VLOG(VALIDATOR_SESSION_INFO) << this << "[node " << description().get_source_id(block->source()) << "][block "
                                      << block->hash() << "]: applying action " << msg.get();
+        stats_process_action(block->source(), *msg);
         state = ValidatorSessionState::action(description(), state, block->source(), att, msg.get());
       }
       state = ValidatorSessionState::make_all(description(), state, block->source(), att);
@@ -205,7 +209,7 @@ void ValidatorSessionImpl::preprocess_block(catchain::CatChainBlock *block) {
 }
 
 bool ValidatorSessionImpl::ensure_candidate_unique(td::uint32 src_idx, td::uint32 round,
-                                                  ValidatorSessionCandidateId block_id) {
+                                                   ValidatorSessionCandidateId block_id) {
   auto it = src_round_candidate_[src_idx].find(round);
   if (it != src_round_candidate_[src_idx].end() && it->second != block_id) {
     VLOG(VALIDATOR_SESSION_WARNING) << this << "[node " << description_->get_source_adnl_id(src_idx) << "][candidate "
@@ -218,13 +222,29 @@ bool ValidatorSessionImpl::ensure_candidate_unique(td::uint32 src_idx, td::uint3
 
 void ValidatorSessionImpl::process_broadcast(PublicKeyHash src, td::BufferSlice data,
                                              td::optional<ValidatorSessionCandidateId> expected_id,
-                                             bool is_overlay_broadcast) {
+                                             bool is_overlay_broadcast, bool is_startup) {
+  bool is_optimistic = false;
+  ValidatorSessionCandidateId optimistic_prev_candidate = ValidatorSessionCandidateId::zero();
+  if (is_overlay_broadcast) {
+    auto R = fetch_tl_object<ton_api::validatorSession_optimisticCandidateBroadcast>(data, true);
+    if (R.is_ok()) {
+      if (src == local_id()) {
+        return;
+      }
+      is_optimistic = true;
+      optimistic_prev_candidate = R.ok_ref()->prev_candidate_id_;
+      data = std::move(R.ok_ref()->data_);
+    }
+  }
   // Note: src is not necessarily equal to the sender of this message:
   // If requested using get_broadcast_p2p, src is the creator of the block, sender possibly is some other node.
   auto src_idx = description().get_source_idx(src);
+  td::Timer deserialize_timer;
   auto R =
       deserialize_candidate(data, compress_block_candidates_,
-                            description().opts().max_block_size + description().opts().max_collated_data_size + 1024);
+                            description().opts().max_block_size + description().opts().max_collated_data_size + 1024,
+                            description().opts().proto_version);
+  double deserialize_time = deserialize_timer.elapsed();
   if (R.is_error()) {
     VLOG(VALIDATOR_SESSION_WARNING) << this << "[node " << src << "][broadcast " << sha256_bits256(data.as_slice())
                                     << "]: failed to parse: " << R.move_as_error();
@@ -256,11 +276,84 @@ void ValidatorSessionImpl::process_broadcast(PublicKeyHash src, td::BufferSlice 
   }
 
   if ((td::int32)block_round < (td::int32)cur_round_ - MAX_PAST_ROUND_BLOCK ||
-      block_round >= cur_round_ + MAX_FUTURE_ROUND_BLOCK) {
+      block_round >= cur_round_ + MAX_FUTURE_ROUND_BLOCK || (block_round == 0 && is_optimistic)) {
     VLOG(VALIDATOR_SESSION_NOTICE) << this << "[node " << src << "][broadcast " << block_id
                                    << "]: bad round=" << block_round << " cur_round" << cur_round_;
     return;
   }
+
+  BroadcastInfo broadcast_info{.candidate_id = block_id,
+                               .received_at = td::Clocks::system(),
+                               .deserialize_time = deserialize_time,
+                               .serialized_size = data.size(),
+                               .file_hash = file_hash,
+                               .collated_data_hash = collated_data_file_hash};
+
+  if (is_optimistic) {
+    if (optimistic_broadcasts_.contains({block_round, src_idx})) {
+      VLOG(VALIDATOR_SESSION_WARNING) << this << "[node " << src << "][broadcast " << sha256_bits256(data.as_slice())
+                                      << "]: duplicate optimistic broadcast for round " << block_round;
+      return;
+    }
+    int priority = description().get_node_priority(src_idx, block_round);
+    if (priority < 0) {
+      VLOG(VALIDATOR_SESSION_WARNING) << this << "[node " << src << "][broadcast " << sha256_bits256(data.as_slice())
+                                      << "]: node is not a producer in round " << block_round;
+      return;
+    }
+    if (block_round > cur_round_) {
+      OptimisticBroadcast &optimistic_broadcast = optimistic_broadcasts_[{block_round, src_idx}];
+      optimistic_broadcast.candidate = std::move(candidate);
+      optimistic_broadcast.prev_candidate_id = optimistic_prev_candidate;
+      optimistic_broadcast.broadcast_info = broadcast_info;
+      VLOG(VALIDATOR_SESSION_WARNING) << this << ": received optimistic broadcast " << block_id << " from " << src
+                                      << ", round " << block_round;
+      validate_optimistic_broadcast(
+          BlockSourceInfo{description().get_source_public_key(src_idx),
+                          BlockCandidatePriority{block_round, block_round, priority}},
+          optimistic_broadcast.candidate->root_hash_, optimistic_broadcast.candidate->data_.clone(),
+          optimistic_broadcast.candidate->collated_data_.clone(), optimistic_broadcast.prev_candidate_id);
+      return;
+    }
+    if (SentBlock::get_block_id(real_state_->get_committed_block(description(), block_round - 1)) !=
+        optimistic_prev_candidate) {
+      VLOG(VALIDATOR_SESSION_WARNING) << this << "[node " << src << "][broadcast " << sha256_bits256(data.as_slice())
+                                      << "]: dropping optimistic broadcast for round " << block_round
+                                      << " - prev candidate mismatch";
+      return;
+    }
+  }
+  process_received_block(block_round, src, src_idx, std::move(candidate), broadcast_info, is_overlay_broadcast,
+                         is_startup);
+}
+
+void ValidatorSessionImpl::process_received_block(td::uint32 block_round, PublicKeyHash src, td::uint32 src_idx,
+                                                  tl_object_ptr<ton_api::validatorSession_candidate> candidate,
+                                                  const BroadcastInfo &info, bool is_overlay_broadcast,
+                                                  bool is_startup) {
+  ValidatorSessionCandidateId block_id = info.candidate_id;
+  auto stat = stats_get_candidate_stat(block_round, src, block_id);
+  if (stat) {
+    if (stat->block_status == ValidatorSessionStats::status_none) {
+      stat->block_status = ValidatorSessionStats::status_received;
+    }
+    if (stat->got_block_at <= 0.0) {
+      stat->got_block_at = info.received_at;
+      if (is_overlay_broadcast) {
+        stat->got_block_by = ValidatorSessionStats::recv_broadcast;
+      } else if (is_startup) {
+        stat->got_block_by = ValidatorSessionStats::recv_startup;
+      } else {
+        stat->got_block_by = ValidatorSessionStats::recv_query;
+      }
+    }
+    stat->deserialize_time = info.deserialize_time;
+    stat->serialized_size = (int)info.serialized_size;
+    stat->block_id.root_hash = candidate->root_hash_;
+    stat->block_id.file_hash = info.file_hash;
+    stat->collated_data_hash = info.collated_data_hash;
+  }
+
   auto it = blocks_.find(block_id);
   if (it != blocks_.end()) {
     it->second->round_ = std::max<td::uint32>(it->second->round_, block_round);
@@ -280,18 +373,23 @@ void ValidatorSessionImpl::process_broadcast(PublicKeyHash src, td::BufferSlice 
   }
 
   blocks_[block_id] = std::move(candidate);
+  if (auto it = block_waiters_.find(block_id); it != block_waiters_.end()) {
+    for (auto &promise : it->second) {
+      promise.set_result(td::Unit());
+    }
+    block_waiters_.erase(it);
+  }
 
   VLOG(VALIDATOR_SESSION_WARNING) << this << ": received broadcast " << block_id;
   if (block_round != cur_round_) {
     return;
   }
 
-  CHECK(!pending_approve_.count(block_id));
-  CHECK(!approved_.count(block_id));
-  CHECK(!pending_reject_.count(block_id));
-  CHECK(!rejected_.count(block_id));
+  CHECK(!pending_approve_.contains(block_id));
+  CHECK(!approved_.contains(block_id));
+  CHECK(!pending_reject_.contains(block_id));
+  CHECK(!rejected_.contains(block_id));
 
-  stats_set_candidate_status(cur_round_, src, block_id, ValidatorSessionStats::status_received);
   auto v = virtual_state_->choose_blocks_to_approve(description(), local_idx());
   for (auto &b : v) {
     if (b && SentBlock::get_block_id(b) == block_id) {
@@ -299,6 +397,37 @@ void ValidatorSessionImpl::process_broadcast(PublicKeyHash src, td::BufferSlice 
       break;
     }
   }
+}
+
+void ValidatorSessionImpl::validate_optimistic_broadcast(BlockSourceInfo source_info,
+                                                         ValidatorSessionRootHash root_hash, td::BufferSlice data,
+                                                         td::BufferSlice collated_data,
+                                                         ValidatorSessionCandidateId prev_candidate_id) {
+  if (source_info.priority.round <= cur_round_) {
+    VLOG(VALIDATOR_SESSION_DEBUG) << this << ": validate optimistic broadcast from "
+                                  << source_info.source.compute_short_id() << " : too old";
+    return;
+  }
+  auto it = blocks_.find(prev_candidate_id);
+  if (it == blocks_.end()) {
+    VLOG(VALIDATOR_SESSION_DEBUG) << this << ": validate optimistic broadcast from "
+                                  << source_info.source.compute_short_id() << " : wait for prev block";
+    block_waiters_[prev_candidate_id].push_back(
+        [=, SelfId = actor_id(this), data = std::move(data),
+         collated_data = std::move(collated_data)](td::Result<td::Unit> R) mutable {
+          if (R.is_ok()) {
+            td::actor::send_closure(SelfId, &ValidatorSessionImpl::validate_optimistic_broadcast, source_info,
+                                    root_hash, std::move(data), std::move(collated_data), prev_candidate_id);
+          }
+        });
+    return;
+  }
+  VLOG(VALIDATOR_SESSION_DEBUG) << this << ": validate optimistic broadcast from "
+                                << source_info.source.compute_short_id();
+  callback_->on_optimistic_candidate(
+      source_info, root_hash, std::move(data), std::move(collated_data),
+      description().get_source_public_key(description().get_source_idx(PublicKeyHash{it->second->src_})),
+      it->second->root_hash_, it->second->data_.clone(), it->second->collated_data_.clone());
 }
 
 void ValidatorSessionImpl::process_message(PublicKeyHash src, td::BufferSlice data) {
@@ -363,9 +492,16 @@ void ValidatorSessionImpl::process_query(PublicKeyHash src, td::BufferSlice data
 }
 
 void ValidatorSessionImpl::candidate_decision_fail(td::uint32 round, ValidatorSessionCandidateId hash,
-                                                   std::string result, td::uint32 src, td::BufferSlice proof) {
-  stats_set_candidate_status(round, description().get_source_id(src), hash, ValidatorSessionStats::status_rejected,
-                             result);
+                                                   std::string result, td::uint32 src, td::BufferSlice proof,
+                                                   double validation_time, bool validation_cached) {
+  auto stat = stats_get_candidate_stat(round, description().get_source_id(src), hash);
+  if (stat) {
+    stat->block_status = ValidatorSessionStats::status_rejected;
+    stat->comment = result;
+    stat->validation_time = validation_time;
+    stat->validated_at = td::Clocks::system();
+    stat->validation_cached = validation_cached;
+  }
   if (round != cur_round_) {
     return;
   }
@@ -379,9 +515,17 @@ void ValidatorSessionImpl::candidate_decision_fail(td::uint32 round, ValidatorSe
 }
 
 void ValidatorSessionImpl::candidate_decision_ok(td::uint32 round, ValidatorSessionCandidateId hash, RootHash root_hash,
-                                                 FileHash file_hash, td::uint32 src, td::uint32 ok_from) {
-  stats_set_candidate_status(round, description().get_source_id(src), hash, ValidatorSessionStats::status_approved,
-                             PSTRING() << "ts=" << ok_from);
+                                                 FileHash file_hash, td::uint32 src, td::uint32 ok_from,
+                                                 double validation_time, bool validation_cached) {
+  auto stat = stats_get_candidate_stat(round, description().get_source_id(src), hash);
+  if (stat) {
+    stat->block_status = ValidatorSessionStats::status_approved;
+    stat->comment = PSTRING() << "ts=" << ok_from;
+    stat->validation_time = validation_time;
+    stat->gen_utime = (int)ok_from;
+    stat->validated_at = td::Clocks::system();
+    stat->validation_cached = validation_cached;
+  }
   if (round != cur_round_) {
     return;
   }
@@ -417,35 +561,82 @@ void ValidatorSessionImpl::candidate_approved_signed(td::uint32 round, Validator
   }
 }
 
-void ValidatorSessionImpl::generated_block(td::uint32 round, ValidatorSessionCandidateId root_hash,
-                                           td::BufferSlice data, td::BufferSlice collated_data) {
+void ValidatorSessionImpl::generated_block(td::uint32 round, GeneratedCandidate c, double collation_time) {
+  if (c.candidate.data.size() > description().opts().max_block_size ||
+      c.candidate.collated_data.size() > description().opts().max_collated_data_size) {
+    LOG(ERROR) << this << ": generated candidate is too big. Dropping. size=" << c.candidate.data.size() << " "
+               << c.candidate.collated_data.size();
+    return;
+  }
+  auto file_hash = sha256_bits256(c.candidate.data.as_slice());
+  auto collated_data_file_hash = sha256_bits256(c.candidate.collated_data.as_slice());
+  auto block_id = description().candidate_id(local_idx(), c.candidate.id.root_hash, file_hash, collated_data_file_hash);
+
+  auto stat = stats_get_candidate_stat(round, local_id(), block_id);
+  if (stat) {
+    stat->block_status = ValidatorSessionStats::status_received;
+    stat->collation_time = collation_time;
+    stat->collated_at = td::Clocks::system();
+    if (auto it = sent_candidates_.find(block_id); it != sent_candidates_.end()) {
+      stat->got_block_at = it->second.sent_at;
+    } else {
+      stat->got_block_at = td::Clocks::system();
+    }
+    stat->got_block_by = ValidatorSessionStats::recv_collated;
+    stat->collation_cached = c.is_cached;
+    stat->self_collated = c.self_collated;
+    stat->collator_node_id = c.collator_node_id;
+    stat->block_id = c.candidate.id;
+    stat->collated_data_hash = collated_data_file_hash;
+  }
   if (round != cur_round_) {
     return;
   }
-  if (data.size() > description().opts().max_block_size ||
-      collated_data.size() > description().opts().max_collated_data_size) {
-    LOG(ERROR) << this << ": generated candidate is too big. Dropping. size=" << data.size() << " "
-               << collated_data.size();
-    return;
+  SentCandidateStats &send_stats = send_candidate_broadcast(round, c.candidate);
+  if (stat) {
+    stat->serialize_time = send_stats.serialize_time;
+    stat->serialized_size = send_stats.serialized_size;
   }
-  auto file_hash = sha256_bits256(data.as_slice());
-  auto collated_data_file_hash = sha256_bits256(collated_data.as_slice());
 
-  auto b = create_tl_object<ton_api::validatorSession_candidate>(local_id().tl(), round, root_hash, std::move(data),
-                                                                 std::move(collated_data));
-
-  auto B = serialize_candidate(b, compress_block_candidates_).move_as_ok();
-
-  auto block_id = description().candidate_id(local_idx(), root_hash, file_hash, collated_data_file_hash);
-
-  td::actor::send_closure(catchain_, &catchain::CatChain::send_broadcast, std::move(B));
-
-  blocks_.emplace(block_id, std::move(b));
+  blocks_[block_id] = create_tl_object<ton_api::validatorSession_candidate>(
+      local_id().tl(), round, c.candidate.id.root_hash, std::move(c.candidate.data),
+      std::move(c.candidate.collated_data));
+  if (auto it = block_waiters_.find(block_id); it != block_waiters_.end()) {
+    for (auto &promise : it->second) {
+      promise.set_result(td::Unit());
+    }
+    block_waiters_.erase(it);
+  }
   pending_generate_ = false;
   generated_ = true;
   generated_block_ = block_id;
 
   request_new_block(true);
+}
+
+ValidatorSessionImpl::SentCandidateStats &ValidatorSessionImpl::send_candidate_broadcast(
+    td::uint32 round, const BlockCandidate &candidate,
+    td::optional<ValidatorSessionCandidateId> optimistic_prev_candidate) {
+  ValidatorSessionCandidateId candidate_id = description().candidate_id(
+      local_idx(), candidate.id.root_hash, candidate.id.file_hash, candidate.collated_file_hash);
+  SentCandidateStats &stats = sent_candidates_[candidate_id];
+  if (stats.sent) {
+    return stats;
+  }
+  stats.sent = true;
+  td::Timer serialize_timer;
+  auto b = create_tl_object<ton_api::validatorSession_candidate>(
+      local_id().tl(), round, candidate.id.root_hash, candidate.data.clone(), candidate.collated_data.clone());
+  auto data = serialize_candidate(b, compress_block_candidates_).move_as_ok();
+  stats.serialize_time = serialize_timer.elapsed();
+  stats.sent_at = td::Clocks::system();
+  stats.serialized_size = data.size();
+  if (optimistic_prev_candidate) {
+    data = create_serialize_tl_object<ton_api::validatorSession_optimisticCandidateBroadcast>(
+        0, optimistic_prev_candidate.value(), std::move(data));
+  }
+  td::actor::send_closure(catchain_, &catchain::CatChain::send_broadcast, std::move(data));
+  return stats;
 }
 
 void ValidatorSessionImpl::signed_block(td::uint32 round, ValidatorSessionCandidateId hash, td::BufferSlice signature) {
@@ -496,16 +687,17 @@ void ValidatorSessionImpl::check_generate_slot() {
         td::PerfWarningTimer timer{"too long block generation", 1.0};
 
         auto P = td::PromiseCreator::lambda([SelfId = actor_id(this), print_id = print_id(), timer = std::move(timer),
-                                             round = cur_round_](td::Result<BlockCandidate> R) {
+                                             round = cur_round_](td::Result<GeneratedCandidate> R) {
           if (R.is_ok()) {
-            auto c = R.move_as_ok();
-            td::actor::send_closure(SelfId, &ValidatorSessionImpl::generated_block, round, c.id.root_hash,
-                                    c.data.clone(), c.collated_data.clone());
+            td::actor::send_closure(SelfId, &ValidatorSessionImpl::generated_block, round, R.move_as_ok(),
+                                    timer.elapsed());
           } else {
             LOG(WARNING) << print_id << ": failed to generate block candidate: " << R.move_as_error();
           }
         });
-        callback_->on_generate_slot(cur_round_, std::move(P));
+        callback_->on_generate_slot(BlockSourceInfo{description().get_source_public_key(local_idx()),
+                                                    BlockCandidatePriority{cur_round_, first_block_round_, priority}},
+                                    std::move(P));
       } else {
         alarm_timestamp().relax(t);
       }
@@ -526,7 +718,7 @@ void ValidatorSessionImpl::try_approve_block(const SentBlock *block) {
       return;
     }
   }
-  if (pending_approve_.count(block_id) || rejected_.count(block_id)) {
+  if (pending_approve_.contains(block_id) || rejected_.contains(block_id)) {
     return;
   }
 
@@ -550,6 +742,20 @@ void ValidatorSessionImpl::try_approve_block(const SentBlock *block) {
       it->second->round_ = std::max<td::uint32>(it->second->round_, cur_round_);
       td::PerfWarningTimer timer{"too long block validation", 1.0};
       auto &B = it->second;
+      auto stat = stats_get_candidate_stat(B->round_, PublicKeyHash{B->src_});
+      if (stat) {
+        // Can happen if block is cached from previous round
+        if (stat->block_status == ValidatorSessionStats::status_none) {
+          stat->block_status = ValidatorSessionStats::status_received;
+        }
+        if (stat->got_block_at <= 0.0) {
+          stat->got_block_at = td::Clocks::system();
+          stat->got_block_by = ValidatorSessionStats::recv_cached;
+        }
+        stat->block_id.root_hash = B->root_hash_;
+        stat->block_id.file_hash = td::sha256_bits256(B->data_);
+        stat->collated_data_hash = td::sha256_bits256(B->collated_data_);
+      }
 
       auto P = td::PromiseCreator::lambda([round = cur_round_, hash = block_id, root_hash = block->get_root_hash(),
                                            file_hash = block->get_file_hash(), timer = std::move(timer),
@@ -563,18 +769,21 @@ void ValidatorSessionImpl::try_approve_block(const SentBlock *block) {
         auto R = res.move_as_ok();
         if (R.is_ok()) {
           td::actor::send_closure(SelfId, &ValidatorSessionImpl::candidate_decision_ok, round, hash, root_hash,
-                                  file_hash, src, R.ok_from());
+                                  file_hash, src, R.ok_from(), timer.elapsed(), R.is_cached());
         } else {
-          td::actor::send_closure(SelfId, &ValidatorSessionImpl::candidate_decision_fail, round, hash, R.reason(),
-                                  src, R.proof());
+          td::actor::send_closure(SelfId, &ValidatorSessionImpl::candidate_decision_fail, round, hash, R.reason(), src,
+                                  R.proof(), timer.elapsed(), R.is_cached());
         }
       });
       pending_approve_.insert(block_id);
 
-      callback_->on_candidate(cur_round_, description().get_source_public_key(block->get_src_idx()), B->root_hash_,
-                              B->data_.clone(), B->collated_data_.clone(), std::move(P));
+      callback_->on_candidate(
+          BlockSourceInfo{description().get_source_public_key(block->get_src_idx()),
+                          BlockCandidatePriority{cur_round_, first_block_round_,
+                                                 description().get_node_priority(block->get_src_idx(), cur_round_)}},
+          B->root_hash_, B->data_.clone(), B->collated_data_.clone(), std::move(P));
     } else if (T.is_in_past()) {
-      if (!active_requests_.count(block_id)) {
+      if (!active_requests_.contains(block_id)) {
         auto v = virtual_state_->get_block_approvers(description(), block_id);
         if (v.size() > 0) {
           auto id = description().get_source_id(v[td::Random::fast(0, static_cast<td::int32>(v.size() - 1))]);
@@ -589,7 +798,7 @@ void ValidatorSessionImpl::try_approve_block(const SentBlock *block) {
                                                   << ": " << R.move_as_error();
                 } else {
                   td::actor::send_closure(SelfId, &ValidatorSessionImpl::process_broadcast, src_id, R.move_as_ok(),
-                                          candidate_id, false);
+                                          candidate_id, false, false);
                 }
               });
 
@@ -718,9 +927,9 @@ void ValidatorSessionImpl::check_all() {
     for (auto &B : to_approve) {
       if (B) {
         auto block_id = SentBlock::get_block_id(B);
-        auto pending = pending_approve_.count(block_id) == 1;
-        auto rejected = rejected_.count(block_id) == 1;
-        auto accepted = approved_.count(block_id) == 1;
+        auto pending = pending_approve_.contains(block_id);
+        auto rejected = rejected_.contains(block_id);
+        auto accepted = approved_.contains(block_id);
         sb << "    " << block_id << " pending:  " << pending << " rejected: " << rejected << " accepted: " << accepted
            << "\n";
       } else {
@@ -754,11 +963,23 @@ void ValidatorSessionImpl::request_new_block(bool now) {
   } else {
     double lambda = 10.0 / description().get_total_nodes();
     double x = -1 / lambda * log(td::Random::fast(1, 999) * 0.001);
-    if (x > 0.5) {
-      x = 0.5;
-    }
+    x = std::min(x, get_current_max_block_delay());  // default = 0.4
     td::actor::send_closure(catchain_, &catchain::CatChain::need_new_block, td::Timestamp::in(x));
   }
+}
+
+double ValidatorSessionImpl::get_current_max_block_delay() const {
+  td::uint32 att = real_state_->cur_attempt_in_round(*description_);
+  td::uint32 att1 = description_->opts().max_round_attempts;
+  if (att <= att1) {
+    return catchain_max_block_delay_;
+  }
+  td::uint32 att2 = att1 + 4;
+  if (att >= att2) {
+    return catchain_max_block_delay_slow_;
+  }
+  return catchain_max_block_delay_ +
+         (catchain_max_block_delay_slow_ - catchain_max_block_delay_) * (double)(att - att1) / (double)(att2 - att1);
 }
 
 void ValidatorSessionImpl::on_new_round(td::uint32 round) {
@@ -818,28 +1039,45 @@ void ValidatorSessionImpl::on_new_round(td::uint32 round) {
       callback_->on_block_skipped(cur_round_);
     } else {
       cur_stats_.success = true;
-      cur_stats_.timestamp = (td::uint64)td::Clocks::system();
+      cur_stats_.timestamp = td::Clocks::system();
       cur_stats_.signatures = (td::uint32)export_sigs.size();
       cur_stats_.signatures_weight = signatures_weight;
       cur_stats_.approve_signatures = (td::uint32)export_approve_sigs.size();
       cur_stats_.approve_signatures_weight = approve_signatures_weight;
       cur_stats_.creator = description().get_source_id(block->get_src_idx());
-
-      if (it == blocks_.end()) {
-        callback_->on_block_committed(cur_round_, description().get_source_public_key(block->get_src_idx()),
-                                      block->get_root_hash(), block->get_file_hash(), td::BufferSlice(),
-                                      std::move(export_sigs), std::move(export_approve_sigs), std::move(cur_stats_));
-      } else {
-        callback_->on_block_committed(cur_round_, description().get_source_public_key(block->get_src_idx()),
-                                      block->get_root_hash(), block->get_file_hash(), it->second->data_.clone(),
-                                      std::move(export_sigs), std::move(export_approve_sigs), std::move(cur_stats_));
+      auto stat = stats_get_candidate_stat(cur_round_, cur_stats_.creator);
+      if (stat) {
+        stat->is_accepted = true;
       }
+      auto stats = cur_stats_;
+      while (!stats.rounds.empty() && stats.rounds.size() + stats.first_round - 1 > cur_round_) {
+        stats.rounds.pop_back();
+      }
+
+      BlockSourceInfo source_info{
+          description().get_source_public_key(block->get_src_idx()),
+          BlockCandidatePriority{cur_round_, first_block_round_,
+                                 description().get_node_priority(block->get_src_idx(), cur_round_)}};
+      if (it == blocks_.end()) {
+        callback_->on_block_committed(std::move(source_info), block->get_root_hash(), block->get_file_hash(),
+                                      td::BufferSlice(), std::move(export_sigs), std::move(export_approve_sigs),
+                                      std::move(stats));
+      } else {
+        callback_->on_block_committed(std::move(source_info), block->get_root_hash(), block->get_file_hash(),
+                                      it->second->data_.clone(), std::move(export_sigs), std::move(export_approve_sigs),
+                                      std::move(stats));
+      }
+      first_block_round_ = cur_round_ + 1;
     }
     cur_round_++;
     if (have_block) {
       stats_init();
     } else {
-      stats_add_round();
+      size_t round_idx = cur_round_ - cur_stats_.first_round;
+      while (round_idx >= cur_stats_.rounds.size()) {
+        stats_add_round();
+      }
+      cur_stats_.rounds[round_idx].started_at = td::Clocks::system();
     }
     auto it2 = blocks_.begin();
     while (it2 != blocks_.end()) {
@@ -853,6 +1091,18 @@ void ValidatorSessionImpl::on_new_round(td::uint32 round) {
 
   round_started_at_ = td::Timestamp::now();
   round_debug_at_ = td::Timestamp::in(60.0);
+  for (auto it = optimistic_broadcasts_.begin(); it != optimistic_broadcasts_.end() && it->first.first <= cur_round_;) {
+    OptimisticBroadcast &optimistic_broadcast = it->second;
+    auto [block_round, src_idx] = it->first;
+    if (SentBlock::get_block_id(real_state_->get_committed_block(description(), block_round - 1)) ==
+        optimistic_broadcast.prev_candidate_id) {
+      process_received_block(block_round, description().get_source_id(src_idx), src_idx,
+                             std::move(optimistic_broadcast.candidate), optimistic_broadcast.broadcast_info, true,
+                             false);
+    }
+    it = optimistic_broadcasts_.erase(it);
+  }
+
   check_all();
 }
 
@@ -874,8 +1124,8 @@ void ValidatorSessionImpl::on_catchain_started() {
           auto broadcast = create_tl_object<ton_api::validatorSession_candidate>(
               src.tl(), round, root_hash, std::move(B.data), std::move(B.collated_data));
           td::actor::send_closure(SelfId, &ValidatorSessionImpl::process_broadcast, src,
-                                  serialize_candidate(broadcast, compress).move_as_ok(), td::optional<ValidatorSessionCandidateId>(),
-                                  false);
+                                  serialize_candidate(broadcast, compress).move_as_ok(),
+                                  td::optional<ValidatorSessionCandidateId>(), false, true);
         }
       });
       callback_->get_approved_candidate(description().get_source_public_key(x->get_src_idx()), x->get_root_hash(),
@@ -890,7 +1140,7 @@ ValidatorSessionImpl::ValidatorSessionImpl(catchain::CatChainSessionId session_i
                                            PublicKeyHash local_id, std::vector<ValidatorSessionNode> nodes,
                                            std::unique_ptr<Callback> callback,
                                            td::actor::ActorId<keyring::Keyring> keyring,
-                                           td::actor::ActorId<adnl::Adnl> adnl, td::actor::ActorId<rldp::Rldp> rldp,
+                                           td::actor::ActorId<adnl::Adnl> adnl, td::actor::ActorId<rldp2::Rldp> rldp,
                                            td::actor::ActorId<overlay::Overlays> overlays, std::string db_root,
                                            std::string db_suffix, bool allow_unsafe_self_blocks_resync)
     : unique_hash_(session_id)
@@ -903,19 +1153,23 @@ ValidatorSessionImpl::ValidatorSessionImpl(catchain::CatChainSessionId session_i
     , overlay_manager_(overlays)
     , allow_unsafe_self_blocks_resync_(allow_unsafe_self_blocks_resync) {
   compress_block_candidates_ = opts.proto_version >= 4;
+  allow_optimistic_generation_ = opts.proto_version >= 6;
   description_ = ValidatorSessionDescription::create(std::move(opts), nodes, local_id);
   src_round_candidate_.resize(description_->get_total_nodes());
 }
 
 void ValidatorSessionImpl::start() {
+  round_started_at_ = td::Timestamp::now();
+  round_debug_at_ = td::Timestamp::in(60.0);
+  stats_init();
   started_ = true;
   VLOG(VALIDATOR_SESSION_NOTICE) << this << ": started";
 
   auto w = description().export_catchain_nodes();
 
-  catchain_ = catchain::CatChain::create(
-      make_catchain_callback(), description().opts().catchain_opts, keyring_, adnl_, overlay_manager_, std::move(w),
-      local_id(), unique_hash_, db_root_, db_suffix_, allow_unsafe_self_blocks_resync_);
+  catchain_ = catchain::CatChain::create(make_catchain_callback(), description().opts().catchain_opts, keyring_, adnl_,
+                                         overlay_manager_, std::move(w), local_id(), unique_hash_, db_root_, db_suffix_,
+                                         allow_unsafe_self_blocks_resync_);
 
   check_all();
 }
@@ -929,9 +1183,28 @@ void ValidatorSessionImpl::destroy() {
 }
 
 void ValidatorSessionImpl::get_current_stats(td::Promise<ValidatorSessionStats> promise) {
-  ValidatorSessionStats stats = cur_stats_;
-  stats.timestamp = (td::uint64)td::Clocks::system();
-  promise.set_result(std::move(stats));
+  promise.set_result(cur_stats_);
+}
+
+void ValidatorSessionImpl::get_end_stats(td::Promise<EndValidatorGroupStats> promise) {
+  if (!started_) {
+    promise.set_error(td::Status::Error(ErrorCode::notready, "not started"));
+    return;
+  }
+  EndValidatorGroupStats stats{.session_id = unique_hash_, .timestamp = td::Clocks::system(), .self = local_id()};
+  stats.nodes.resize(description().get_total_nodes());
+  for (size_t i = 0; i < stats.nodes.size(); ++i) {
+    stats.nodes[i].id = description().get_source_id(i);
+  }
+  td::actor::send_closure(catchain_, &catchain::CatChain::get_source_heights,
+                          [promise = std::move(promise),
+                           stats = std::move(stats)](td::Result<std::vector<catchain::CatChainBlockHeight>> R) mutable {
+                            TRY_RESULT_PROMISE(promise, heights, std::move(R));
+                            for (size_t i = 0; i < std::min(heights.size(), stats.nodes.size()); ++i) {
+                              stats.nodes[i].catchain_blocks = heights[i];
+                            }
+                            promise.set_result(std::move(stats));
+                          });
 }
 
 void ValidatorSessionImpl::get_validator_group_info_for_litequery(
@@ -991,65 +1264,220 @@ void ValidatorSessionImpl::start_up() {
   virtual_state_ = real_state_;
 
   check_all();
-  td::actor::send_closure(rldp_, &rldp::Rldp::add_id, description().get_source_adnl_id(local_idx()));
-
-  stats_init();
 }
 
 void ValidatorSessionImpl::stats_init() {
+  auto old_rounds = std::move(cur_stats_.rounds);
+  if (stats_inited_ && cur_stats_.first_round + old_rounds.size() > cur_round_) {
+    old_rounds.erase(old_rounds.begin(), old_rounds.end() - (cur_stats_.first_round + old_rounds.size() - cur_round_));
+  } else {
+    old_rounds.clear();
+  }
   cur_stats_ = ValidatorSessionStats();
+  cur_stats_.rounds = std::move(old_rounds);
   cur_stats_.first_round = cur_round_;
   cur_stats_.session_id = unique_hash_;
   cur_stats_.total_validators = description().get_total_nodes();
   cur_stats_.total_weight = description().get_total_weight();
   cur_stats_.self = description().get_source_id(local_idx());
-  stats_add_round();
+
+  for (auto it = stats_pending_approve_.begin(); it != stats_pending_approve_.end();) {
+    if (it->first.first < cur_round_) {
+      it = stats_pending_approve_.erase(it);
+    } else {
+      ++it;
+    }
+  }
+  for (auto it = stats_pending_sign_.begin(); it != stats_pending_sign_.end();) {
+    if (it->first.first < cur_round_) {
+      it = stats_pending_sign_.erase(it);
+    } else {
+      ++it;
+    }
+  }
+
+  if (cur_stats_.rounds.empty()) {
+    stats_add_round();
+  }
+  cur_stats_.rounds[0].started_at = td::Clocks::system();
+  stats_inited_ = true;
 }
 
 void ValidatorSessionImpl::stats_add_round() {
+  td::uint32 round = cur_stats_.first_round + cur_stats_.rounds.size();
   cur_stats_.rounds.emplace_back();
-  auto& round = cur_stats_.rounds.back();
-  round.timestamp = (td::uint64)td::Clocks::system();
-  round.producers.resize(description().get_max_priority() + 1);
+  auto &stat = cur_stats_.rounds.back();
+  stat.producers.resize(description().get_max_priority() + 1);
   for (td::uint32 i = 0; i < description().get_total_nodes(); i++) {
-    td::int32 priority = description().get_node_priority(i, cur_round_);
+    td::int32 priority = description().get_node_priority(i, round);
     if (priority >= 0) {
-      CHECK((size_t)priority < round.producers.size());
-      round.producers[priority].id = description().get_source_id(i);
+      CHECK((size_t)priority < stat.producers.size());
+      stat.producers[priority].validator_id = description().get_source_id(i);
+      stat.producers[priority].is_ours = (local_idx() == i);
+      stat.producers[priority].approvers.resize(description().get_total_nodes(), false);
+      stat.producers[priority].signers.resize(description().get_total_nodes(), false);
     }
   }
-  while (!round.producers.empty() && round.producers.back().id.is_zero()) {
-    round.producers.pop_back();
+  while (!stat.producers.empty() && stat.producers.back().validator_id.is_zero()) {
+    stat.producers.pop_back();
   }
 }
 
-void ValidatorSessionImpl::stats_set_candidate_status(td::uint32 round, PublicKeyHash src,
-                                                      ValidatorSessionCandidateId candidate_id, int status,
-                                                      std::string comment) {
-  if (round < cur_stats_.first_round || round - cur_stats_.first_round >= cur_stats_.rounds.size()) {
-    return;
+ValidatorSessionStats::Producer *ValidatorSessionImpl::stats_get_candidate_stat(
+    td::uint32 round, PublicKeyHash src, ValidatorSessionCandidateId candidate_id) {
+  if (round < cur_stats_.first_round || round > cur_round_ + 5) {
+    return nullptr;
+  }
+  while (round - cur_stats_.first_round >= cur_stats_.rounds.size()) {
+    stats_add_round();
   }
   auto &stats_round = cur_stats_.rounds[round - cur_stats_.first_round];
   auto it = std::find_if(stats_round.producers.begin(), stats_round.producers.end(),
-                         [&](const ValidatorSessionStats::Producer &p) { return p.id == src; });
+                         [&](const ValidatorSessionStats::Producer &p) { return p.validator_id == src; });
   if (it == stats_round.producers.end()) {
+    return nullptr;
+  }
+  if (!candidate_id.is_zero()) {
+    it->candidate_id = candidate_id;
+  }
+  auto it2 = stats_pending_approve_.find({round, it->candidate_id});
+  if (it2 != stats_pending_approve_.end()) {
+    for (td::uint32 node_id : it2->second) {
+      process_approve(node_id, round, it->candidate_id);
+    }
+    stats_pending_approve_.erase(it2);
+  }
+  it2 = stats_pending_sign_.find({round, it->candidate_id});
+  if (it2 != stats_pending_sign_.end()) {
+    for (td::uint32 node_id : it2->second) {
+      it->set_signed_by(node_id, description().get_node_weight(node_id), description().get_total_weight());
+    }
+    stats_pending_sign_.erase(it2);
+  }
+  return &*it;
+}
+
+ValidatorSessionStats::Producer *ValidatorSessionImpl::stats_get_candidate_stat_by_id(
+    td::uint32 round, ValidatorSessionCandidateId candidate_id) {
+  if (round < cur_stats_.first_round || round > cur_round_ + 5) {
+    return nullptr;
+  }
+  while (round - cur_stats_.first_round >= cur_stats_.rounds.size()) {
+    stats_add_round();
+  }
+  auto &stats_round = cur_stats_.rounds[round - cur_stats_.first_round];
+  auto it = std::find_if(stats_round.producers.begin(), stats_round.producers.end(),
+                         [&](const ValidatorSessionStats::Producer &p) { return p.candidate_id == candidate_id; });
+  if (it == stats_round.producers.end()) {
+    return nullptr;
+  }
+  return &*it;
+}
+
+void ValidatorSessionImpl::stats_process_action(td::uint32 node_id, ton_api::validatorSession_round_Message &action) {
+  ton_api::downcast_call(
+      action,
+      td::overloaded(
+          [&](const ton_api::validatorSession_message_submittedBlock &obj) {
+            auto candidate_id =
+                description().candidate_id(node_id, obj.root_hash_, obj.file_hash_, obj.collated_data_file_hash_);
+            auto stat = stats_get_candidate_stat(obj.round_, description().get_source_id(node_id), candidate_id);
+            if (stat && stat->got_submit_at <= 0.0) {
+              stat->got_submit_at = td::Clocks::system();
+              stat->block_id.root_hash = obj.root_hash_;
+              stat->block_id.file_hash = obj.file_hash_;
+              stat->collated_data_hash = obj.collated_data_file_hash_;
+            }
+          },
+          [&](const ton_api::validatorSession_message_approvedBlock &obj) {
+            if (obj.candidate_ == skip_round_candidate_id()) {
+              return;
+            }
+            process_approve(node_id, obj.round_, obj.candidate_);
+          },
+          [&](const ton_api::validatorSession_message_commit &obj) {
+            if (obj.candidate_ == skip_round_candidate_id()) {
+              return;
+            }
+            auto stat = stats_get_candidate_stat_by_id(obj.round_, obj.candidate_);
+            if (stat) {
+              stat->set_signed_by(node_id, description().get_node_weight(node_id), description().get_total_weight());
+            } else {
+              stats_pending_sign_[{obj.round_, obj.candidate_}].push_back(node_id);
+            }
+          },
+          [](const auto &) {}));
+}
+
+void ValidatorSessionImpl::process_approve(td::uint32 node_id, td::uint32 round,
+                                           ValidatorSessionCandidateId candidate_id) {
+  auto stat = stats_get_candidate_stat_by_id(round, candidate_id);
+  if (!stat) {
+    stats_pending_approve_[{round, candidate_id}].push_back(node_id);
     return;
   }
-  it->candidate_id = candidate_id;
-  if (it->block_status == ValidatorSessionStats::status_none) {
-    it->block_timestamp = (td::uint64)td::Clocks::system();
+
+  bool was_approved_66pct = stat->approved_66pct_at > 0.0;
+  stat->set_approved_by(node_id, description().get_node_weight(node_id), description().get_total_weight());
+  bool is_approved_66pct = stat->approved_66pct_at > 0.0;
+
+  if (allow_optimistic_generation_ && !was_approved_66pct && is_approved_66pct && cur_round_ == round &&
+      cur_round_ == first_block_round_ && description().get_node_priority(local_idx(), round + 1) == 0 &&
+      blocks_.contains(candidate_id) &&
+      description().get_node_priority(description().get_source_idx(stat->validator_id), cur_round_) == 0) {
+    if (blocks_.contains(candidate_id)) {
+      generate_block_optimistic(round, candidate_id);
+    } else {
+      block_waiters_[candidate_id].push_back([=, SelfId = actor_id(this)](td::Result<td::Unit> R) {
+        if (R.is_ok()) {
+          td::actor::send_closure(SelfId, &ValidatorSessionImpl::generate_block_optimistic, round, candidate_id);
+        }
+      });
+    }
   }
-  it->block_status = status;
-  if (!comment.empty()) {
-    it->comment = std::move(comment);
+}
+
+void ValidatorSessionImpl::generate_block_optimistic(td::uint32 cur_round,
+                                                     ValidatorSessionCandidateId prev_candidate_id) {
+  if (cur_round != cur_round_) {
+    return;
   }
+  auto it = blocks_.find(prev_candidate_id);
+  if (it == blocks_.end()) {
+    return;
+  }
+  auto &block = it->second;
+  auto stat = stats_get_candidate_stat_by_id(cur_round, prev_candidate_id);
+  if (!stat) {
+    return;
+  }
+  callback_->generate_block_optimistic(BlockSourceInfo{description().get_source_public_key(local_idx()),
+                                                       BlockCandidatePriority{cur_round + 1, cur_round + 1, 0}},
+                                       block->data_.clone(), block->root_hash_, stat->block_id.file_hash,
+                                       [=, SelfId = actor_id(this)](td::Result<GeneratedCandidate> R) {
+                                         if (R.is_error()) {
+                                           LOG(DEBUG) << "Optimistic generation error: " << R.move_as_error();
+                                           return;
+                                         }
+                                         td::actor::send_closure(SelfId,
+                                                                 &ValidatorSessionImpl::generated_optimistic_candidate,
+                                                                 cur_round + 1, R.move_as_ok(), prev_candidate_id);
+                                       });
+}
+
+void ValidatorSessionImpl::generated_optimistic_candidate(td::uint32 round, GeneratedCandidate candidate,
+                                                          ValidatorSessionCandidateId prev_candidate) {
+  if (cur_round_ > round) {
+    return;
+  }
+  send_candidate_broadcast(round, candidate.candidate, prev_candidate);
 }
 
 td::actor::ActorOwn<ValidatorSession> ValidatorSession::create(
     catchain::CatChainSessionId session_id, ValidatorSessionOptions opts, PublicKeyHash local_id,
     std::vector<ValidatorSessionNode> nodes, std::unique_ptr<Callback> callback,
     td::actor::ActorId<keyring::Keyring> keyring, td::actor::ActorId<adnl::Adnl> adnl,
-    td::actor::ActorId<rldp::Rldp> rldp, td::actor::ActorId<overlay::Overlays> overlays, std::string db_root,
+    td::actor::ActorId<rldp2::Rldp> rldp, td::actor::ActorId<overlay::Overlays> overlays, std::string db_root,
     std::string db_suffix, bool allow_unsafe_self_blocks_resync) {
   return td::actor::create_actor<ValidatorSessionImpl>("session", session_id, std::move(opts), local_id,
                                                        std::move(nodes), std::move(callback), keyring, adnl, rldp,

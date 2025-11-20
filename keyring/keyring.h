@@ -18,8 +18,8 @@
 */
 #pragma once
 
-#include "td/actor/actor.h"
 #include "keys/keys.hpp"
+#include "td/actor/actor.h"
 
 namespace ton {
 
@@ -43,6 +43,8 @@ class Keyring : public td::actor::Actor {
                              td::Promise<std::vector<td::Result<td::BufferSlice>>> promise) = 0;
 
   virtual void decrypt_message(PublicKeyHash key_hash, td::BufferSlice data, td::Promise<td::BufferSlice> promise) = 0;
+
+  virtual void export_all_private_keys(td::Promise<std::vector<PrivateKey>> promise) = 0;
 
   static td::actor::ActorOwn<Keyring> create(std::string db_root);
 };

@@ -18,17 +18,17 @@
 */
 #pragma once
 
-#include "td/utils/common.h"
-#include "Ed25519.h"
-#include "block/block.h"
+#include <algorithm>
+
 #include "block/block-parse.h"
+#include "block/block.h"
+#include "td/utils/common.h"
 #include "vm/cells/CellString.h"
 
+#include "Ed25519.h"
+#include "GenericAccount.h"
 #include "SmartContract.h"
 #include "SmartContractCode.h"
-#include "GenericAccount.h"
-
-#include <algorithm>
 
 namespace ton {
 class WalletInterface : public SmartContract {
@@ -37,6 +37,7 @@ class WalletInterface : public SmartContract {
   struct Gift {
     block::StdAddress destination;
     td::int64 gramms;
+    td::Ref<vm::Cell> extra_currencies;
     td::int32 send_mode{-1};
 
     bool is_encrypted{false};

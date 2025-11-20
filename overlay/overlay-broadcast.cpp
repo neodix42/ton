@@ -16,15 +16,16 @@
 
     Copyright 2017-2020 Telegram Systems LLP
 */
-#include "overlay-broadcast.hpp"
 #include "adnl/adnl-node-id.hpp"
 #include "common/util.h"
-#include "overlay.hpp"
 #include "keys/encryptor.h"
 #include "td/actor/PromiseFuture.h"
 #include "td/actor/actor.h"
 #include "td/utils/Status.h"
 #include "td/utils/port/Stat.h"
+
+#include "overlay-broadcast.hpp"
+#include "overlay.hpp"
 
 namespace ton {
 
@@ -68,7 +69,7 @@ td::Status BroadcastSimple::run_checks() {
 
 td::Status BroadcastSimple::distribute() {
   auto B = serialize();
-  auto nodes = overlay_->get_neighbours(3);
+  auto nodes = overlay_->get_neighbours(overlay_->propagate_broadcast_to());
 
   auto manager = overlay_->overlay_manager();
   for (auto &n : nodes) {
@@ -115,7 +116,8 @@ td::Status BroadcastSimple::run() {
   return run_continue();
 }
 
-td::Status BroadcastSimple::create(OverlayImpl *overlay, adnl::AdnlNodeIdShort src_peer_id, tl_object_ptr<ton_api::overlay_broadcast> broadcast) {
+td::Status BroadcastSimple::create(OverlayImpl *overlay, adnl::AdnlNodeIdShort src_peer_id,
+                                   tl_object_ptr<ton_api::overlay_broadcast> broadcast) {
   auto src = PublicKey{broadcast->src_};
   auto data_hash = sha256_bits256(broadcast->data_.as_slice());
   auto broadcast_hash = compute_broadcast_id(src, data_hash, broadcast->flags_);

@@ -18,8 +18,9 @@
 */
 #pragma once
 
-#include "overlay-manager.h"
 #include "fec/fec.h"
+
+#include "overlay-manager.h"
 #include "overlay.h"
 
 namespace ton {
@@ -37,6 +38,7 @@ class OverlayOutboundFecBroadcast : public td::actor::Actor {
   PublicKeyHash local_id_;
   Overlay::BroadcastDataHash data_hash_;
   td::uint32 flags_ = 0;
+  double delay_ = 0.010;
   td::int32 date_;
   std::unique_ptr<td::fec::Encoder> encoder_;
   td::actor::ActorId<OverlayImpl> overlay_;
@@ -45,9 +47,9 @@ class OverlayOutboundFecBroadcast : public td::actor::Actor {
  public:
   static td::actor::ActorId<OverlayOutboundFecBroadcast> create(td::BufferSlice data, td::uint32 flags,
                                                                 td::actor::ActorId<OverlayImpl> overlay,
-                                                                PublicKeyHash local_id);
+                                                                PublicKeyHash local_id, double speed_multiplier = 1.0);
   OverlayOutboundFecBroadcast(td::BufferSlice data, td::uint32 flags, td::actor::ActorId<OverlayImpl> overlay,
-                              PublicKeyHash local_id);
+                              PublicKeyHash local_id, double speed_multiplier = 1.0);
 
   void alarm() override;
   void start_up() override;

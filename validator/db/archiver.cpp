@@ -16,20 +16,44 @@
 
     Copyright 2017-2020 Telegram Systems LLP
 */
+#include "ton/ton-tl.hpp"
+
 #include "archiver.hpp"
 #include "rootdb.hpp"
-#include "ton/ton-tl.hpp"
 
 namespace ton {
 
 namespace validator {
 
 BlockArchiver::BlockArchiver(BlockHandle handle, td::actor::ActorId<ArchiveManager> archive_db,
-                             td::Promise<td::Unit> promise)
-    : handle_(std::move(handle)), archive_(archive_db), promise_(std::move(promise)) {
+                             td::actor::ActorId<Db> db, td::Promise<td::Unit> promise)
+    : handle_(std::move(handle)), archive_(archive_db), db_(std::move(db)), promise_(std::move(promise)) {
 }
 
 void BlockArchiver::start_up() {
+  VLOG(VALIDATOR_DEBUG) << "started block archiver for " << handle_->id().to_str();
+  if (handle_->moved_to_archive()) {
+    VLOG(VALIDATOR_DEBUG) << "already moved";
+    finish_query();
+    return;
+  }
+  if (handle_->id().is_masterchain()) {
+    td::actor::send_closure(db_, &Db::get_block_state, handle_,
+                            [SelfId = actor_id(this), archive = archive_](td::Result<td::Ref<ShardState>> R) {
+                              R.ensure();
+                              td::Ref<MasterchainState> state{R.move_as_ok()};
+                              td::uint32 monitor_min_split = state->monitor_min_split_depth(basechainId);
+                              td::actor::send_closure(archive, &ArchiveManager::set_current_shard_split_depth,
+                                                      monitor_min_split);
+                              td::actor::send_closure(SelfId, &BlockArchiver::move_handle);
+                            });
+  } else {
+    move_handle();
+  }
+}
+
+void BlockArchiver::move_handle() {
+  VLOG(VALIDATOR_DEBUG) << "move_handle";
   if (handle_->handle_moved_to_archive()) {
     moved_handle();
   } else {
@@ -42,6 +66,7 @@ void BlockArchiver::start_up() {
 }
 
 void BlockArchiver::moved_handle() {
+  VLOG(VALIDATOR_DEBUG) << "moved_handle";
   CHECK(handle_->handle_moved_to_archive());
   if (handle_->moved_to_archive()) {
     finish_query();
@@ -62,6 +87,7 @@ void BlockArchiver::moved_handle() {
 }
 
 void BlockArchiver::got_proof(td::BufferSlice data) {
+  VLOG(VALIDATOR_DEBUG) << "got_proof";
   auto P = td::PromiseCreator::lambda([SelfId = actor_id(this)](td::Result<td::Unit> R) {
     R.ensure();
     td::actor::send_closure(SelfId, &BlockArchiver::written_proof);
@@ -71,6 +97,7 @@ void BlockArchiver::got_proof(td::BufferSlice data) {
 }
 
 void BlockArchiver::written_proof() {
+  VLOG(VALIDATOR_DEBUG) << "written_proof";
   if (!handle_->inited_proof_link()) {
     written_proof_link();
     return;
@@ -86,6 +113,7 @@ void BlockArchiver::written_proof() {
 }
 
 void BlockArchiver::got_proof_link(td::BufferSlice data) {
+  VLOG(VALIDATOR_DEBUG) << "got_proof_link";
   auto P = td::PromiseCreator::lambda([SelfId = actor_id(this)](td::Result<td::Unit> R) {
     R.ensure();
     td::actor::send_closure(SelfId, &BlockArchiver::written_proof_link);
@@ -95,6 +123,7 @@ void BlockArchiver::got_proof_link(td::BufferSlice data) {
 }
 
 void BlockArchiver::written_proof_link() {
+  VLOG(VALIDATOR_DEBUG) << "written_proof_link";
   if (!handle_->received()) {
     written_block_data();
     return;
@@ -108,6 +137,7 @@ void BlockArchiver::written_proof_link() {
 }
 
 void BlockArchiver::got_block_data(td::BufferSlice data) {
+  VLOG(VALIDATOR_DEBUG) << "got_block_data";
   auto P = td::PromiseCreator::lambda([SelfId = actor_id(this)](td::Result<td::Unit> R) {
     R.ensure();
     td::actor::send_closure(SelfId, &BlockArchiver::written_block_data);
@@ -117,6 +147,7 @@ void BlockArchiver::got_block_data(td::BufferSlice data) {
 }
 
 void BlockArchiver::written_block_data() {
+  VLOG(VALIDATOR_DEBUG) << "written_block_data";
   handle_->set_moved_to_archive();
 
   auto P = td::PromiseCreator::lambda([SelfId = actor_id(this)](td::Result<td::Unit> R) {
@@ -127,6 +158,7 @@ void BlockArchiver::written_block_data() {
 }
 
 void BlockArchiver::finish_query() {
+  VLOG(VALIDATOR_DEBUG) << "finished archiving block in " << timer_.elapsed() << " s";
   if (promise_) {
     promise_.set_value(td::Unit());
   }
@@ -134,8 +166,8 @@ void BlockArchiver::finish_query() {
 }
 
 void BlockArchiver::abort_query(td::Status reason) {
+  VLOG(VALIDATOR_WARNING) << "failed to archive block " << handle_->id() << ": " << reason;
   if (promise_) {
-    VLOG(VALIDATOR_WARNING) << "failed to archive block " << handle_->id() << ": " << reason;
     promise_.set_error(std::move(reason));
   }
   stop();
