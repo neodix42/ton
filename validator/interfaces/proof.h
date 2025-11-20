@@ -19,6 +19,7 @@
 #pragma once
 
 #include "ton/ton-types.h"
+
 #include "config.h"
 
 namespace ton {
@@ -47,6 +48,9 @@ class Proof : virtual public ProofLink {
   virtual ~Proof() = default;
   virtual td::Result<td::Ref<ProofLink>> export_as_proof_link() const = 0;
 };
+
+td::Result<td::Ref<vm::Cell>> create_block_state_proof(td::Ref<vm::Cell> root);
+td::Result<RootHash> unpack_block_state_proof(BlockIdExt block_id, td::Ref<vm::Cell> proof);
 
 }  // namespace validator
 

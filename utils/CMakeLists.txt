@@ -1,9 +1,3 @@
-cmake_minimum_required(VERSION 3.5 FATAL_ERROR)
-
-if (NOT OPENSSL_FOUND)
-  find_package(OpenSSL REQUIRED)
-endif()
-
 add_executable(generate-random-id generate-random-id.cpp )
 target_link_libraries(generate-random-id tl_api ton_crypto keys adnl git)
 

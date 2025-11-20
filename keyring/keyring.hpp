@@ -18,10 +18,11 @@
 */
 #pragma once
 
-#include "keyring.h"
+#include <map>
+
 #include "keys/encryptor.h"
 
-#include <map>
+#include "keyring.h"
 
 namespace ton {
 
@@ -33,6 +34,7 @@ class KeyringImpl : public Keyring {
     td::actor::ActorOwn<DecryptorAsync> decryptor_sign;
     td::actor::ActorOwn<DecryptorAsync> decryptor_decrypt;
     PublicKey public_key;
+    PrivateKey private_key;
     bool is_temp;
     PrivateKeyDescr(PrivateKey private_key, bool is_temp);
   };
@@ -56,6 +58,8 @@ class KeyringImpl : public Keyring {
 
   void decrypt_message(PublicKeyHash key_hash, td::BufferSlice data, td::Promise<td::BufferSlice> promise) override;
 
+  void export_all_private_keys(td::Promise<std::vector<PrivateKey>> promise) override;
+
   KeyringImpl(std::string db_root) : db_root_(db_root) {
   }
 
@@ -70,4 +74,3 @@ class KeyringImpl : public Keyring {
 }  // namespace keyring
 
 }  // namespace ton
-

@@ -16,22 +16,22 @@
 
     Copyright 2019-2020 Telegram Systems LLP
 */
-#include "archive-slice.hpp"
-
+#include "common/delay.h"
 #include "td/actor/MultiPromise.h"
-#include "validator/fabric.h"
 #include "td/db/RocksDb.h"
 #include "td/utils/port/path.h"
-#include "common/delay.h"
-#include "files-async.hpp"
+#include "validator/fabric.h"
+
+#include "archive-slice.hpp"
 #include "db-utils.h"
+#include "files-async.hpp"
 
 namespace ton {
 
 namespace validator {
 
 class PackageStatistics {
-  public:
+ public:
   void record_open(uint64_t count = 1) {
     open_count.fetch_add(count, std::memory_order_relaxed);
   }
@@ -82,7 +82,7 @@ class PackageStatistics {
     return ss.str();
   }
 
-  private:
+ private:
   std::atomic_uint64_t open_count{0};
   std::atomic_uint64_t close_count{0};
   PercentileStats read_time;
@@ -131,8 +131,12 @@ void PackageWriter::append(std::string filename, td::BufferSlice data,
 class PackageReader : public td::actor::Actor {
  public:
   PackageReader(std::shared_ptr<Package> package, td::uint64 offset,
-                td::Promise<std::pair<std::string, td::BufferSlice>> promise, std::shared_ptr<PackageStatistics> statistics)
-      : package_(std::move(package)), offset_(offset), promise_(std::move(promise)), statistics_(std::move(statistics)) {
+                td::Promise<std::pair<std::string, td::BufferSlice>> promise,
+                std::shared_ptr<PackageStatistics> statistics)
+      : package_(std::move(package))
+      , offset_(offset)
+      , promise_(std::move(promise))
+      , statistics_(std::move(statistics)) {
   }
   void start_up() override {
     auto start = td::Timestamp::now();
@@ -152,12 +156,12 @@ class PackageReader : public td::actor::Actor {
   std::shared_ptr<PackageStatistics> statistics_;
 };
 
-static std::string get_package_file_name(PackageId p_id, ShardIdFull shard_prefix) {
+static std::string get_package_file_name(PackageId p_id, ShardIdFull shard_prefix, bool legacy = false) {
   td::StringBuilder sb;
   sb << p_id.name();
   if (!shard_prefix.is_masterchain()) {
     sb << ".";
-    sb << shard_prefix.workchain << ":" << shard_to_str(shard_prefix.shard);
+    sb << shard_prefix.workchain << (legacy ? ":" : "_") << shard_to_str(shard_prefix.shard);
   }
   sb << ".pack";
   return sb.as_cslice().str();
@@ -385,7 +389,8 @@ void ArchiveSlice::get_file(ConstBlockHandle handle, FileReference ref_id, td::P
   auto R = kv_->get(ref_id.hash().to_hex(), value);
   R.ensure();
   if (R.move_as_ok() == td::KeyValue::GetStatus::NotFound) {
-    promise.set_error(td::Status::Error(ErrorCode::notready, "file not in archive slice"));
+    promise.set_error(td::Status::Error(
+        ErrorCode::notready, PSTRING() << "file " << ref_id.filename() << " not in archive slice " << get_name()));
     return;
   }
   auto offset = td::to_integer<td::uint64>(value);
@@ -403,7 +408,8 @@ void ArchiveSlice::get_file(ConstBlockHandle handle, FileReference ref_id, td::P
           promise.set_value(std::move(R.move_as_ok().second));
         }
       });
-  td::actor::create_actor<PackageReader>("reader", p->package, offset, std::move(P), statistics_.pack_statistics).release();
+  td::actor::create_actor<PackageReader>("reader", p->package, offset, std::move(P), statistics_.pack_statistics)
+      .release();
 }
 
 void ArchiveSlice::get_block_common(AccountIdPrefixFull account_id,
@@ -508,14 +514,14 @@ void ArchiveSlice::get_block_by_seqno(AccountIdPrefixFull account_id, BlockSeqno
   return get_block_common(
       account_id,
       [seqno](ton_api::db_lt_desc_value &w) {
-        return seqno > static_cast<BlockSeqno>(w.last_seqno_)
-                   ? 1
-                   : seqno == static_cast<BlockSeqno>(w.last_seqno_) ? 0 : -1;
+        return seqno > static_cast<BlockSeqno>(w.last_seqno_)    ? 1
+               : seqno == static_cast<BlockSeqno>(w.last_seqno_) ? 0
+                                                                 : -1;
       },
       [seqno](ton_api::db_lt_el_value &w) {
-        return seqno > static_cast<BlockSeqno>(w.id_->seqno_)
-                   ? 1
-                   : seqno == static_cast<BlockSeqno>(w.id_->seqno_) ? 0 : -1;
+        return seqno > static_cast<BlockSeqno>(w.id_->seqno_)    ? 1
+               : seqno == static_cast<BlockSeqno>(w.id_->seqno_) ? 0
+                                                                 : -1;
       },
       true, std::move(promise));
 }
@@ -554,14 +560,14 @@ void ArchiveSlice::get_slice(td::uint64 archive_id, td::uint64 offset, td::uint3
   before_query();
   auto value = static_cast<td::uint32>(archive_id >> 32);
   PackageInfo *p;
-  if (shard_split_depth_ == 0) {
-    TRY_RESULT_PROMISE_ASSIGN(promise, p, choose_package(value, ShardIdFull{masterchainId}, false));
-  } else {
+  if (shard_separated_) {
     if (value >= packages_.size()) {
       promise.set_error(td::Status::Error(ErrorCode::notready, "no such package"));
       return;
     }
     p = &packages_[value];
+  } else {
+    TRY_RESULT_PROMISE_ASSIGN(promise, p, choose_package(value, ShardIdFull{masterchainId}, false));
   }
   promise = begin_async_query(std::move(promise));
   td::actor::create_actor<db::ReadFile>("readfile", p->path, offset, limit, 0, std::move(promise)).release();
@@ -574,10 +580,10 @@ void ArchiveSlice::get_archive_id(BlockSeqno masterchain_seqno, ShardIdFull shar
     promise.set_result(archive_id_);
   } else {
     TRY_RESULT_PROMISE(promise, p, choose_package(masterchain_seqno, shard_prefix, false));
-    if (shard_split_depth_ == 0) {
-      promise.set_result(p->seqno * (1ull << 32) + archive_id_);
-    } else {
+    if (shard_separated_) {
       promise.set_result(p->idx * (1ull << 32) + archive_id_);
+    } else {
+      promise.set_result(p->seqno * (1ull << 32) + archive_id_);
     }
   }
 }
@@ -609,8 +615,10 @@ void ArchiveSlice::before_query() {
         if (R2.move_as_ok() == td::KeyValue::GetStatus::Ok) {
           shard_split_depth_ = td::to_integer<td::uint32>(value);
           CHECK(shard_split_depth_ <= 60);
+          shard_separated_ = true;
         } else {
           shard_split_depth_ = 0;
+          shard_separated_ = false;
         }
         for (td::uint32 i = 0; i < tot; i++) {
           R2 = kv_->get(PSTRING() << "status." << i, value);
@@ -625,16 +633,16 @@ void ArchiveSlice::before_query() {
           }
           td::uint32 seqno;
           ShardIdFull shard_prefix;
-          if (shard_split_depth_ == 0) {
-            seqno = archive_id_ + slice_size_ * i;
-            shard_prefix = ShardIdFull{masterchainId};
-          } else {
+          if (shard_separated_) {
             R2 = kv_->get(PSTRING() << "info." << i, value);
             R2.ensure();
             CHECK(R2.move_as_ok() == td::KeyValue::GetStatus::Ok);
             unsigned long long shard;
             CHECK(sscanf(value.c_str(), "%u.%d:%016llx", &seqno, &shard_prefix.workchain, &shard) == 3);
             shard_prefix.shard = shard;
+          } else {
+            seqno = archive_id_ + slice_size_ * i;
+            shard_prefix = ShardIdFull{masterchainId};
           }
           add_package(seqno, shard_prefix, len, ver);
         }
@@ -651,10 +659,9 @@ void ArchiveSlice::before_query() {
         kv_->set("slice_size", td::to_string(slice_size_)).ensure();
         kv_->set("status.0", "0").ensure();
         kv_->set("version.0", td::to_string(default_package_version())).ensure();
-        if (shard_split_depth_ > 0) {
-          kv_->set("info.0", package_info_to_str(archive_id_, ShardIdFull{masterchainId})).ensure();
-          kv_->set("shard_split_depth", td::to_string(shard_split_depth_)).ensure();
-        }
+        shard_separated_ = true;
+        kv_->set("info.0", package_info_to_str(archive_id_, ShardIdFull{masterchainId})).ensure();
+        kv_->set("shard_split_depth", td::to_string(shard_split_depth_)).ensure();
         kv_->commit_transaction().ensure();
         add_package(archive_id_, ShardIdFull{masterchainId}, 0, default_package_version());
       } else {
@@ -686,6 +693,24 @@ void ArchiveSlice::close_files() {
   }
 }
 
+void ArchiveSlice::iterate_block_handles(std::function<void(const BlockHandleInterface &)> f) {
+  before_query();
+  td::uint32 range_start = ton_api::db_blockdb_key_value::ID;
+  td::uint32 range_end = ton_api::db_blockdb_key_value::ID + 1;
+  kv_->for_each_in_range(td::Slice{(char *)&range_start, 4}, td::Slice{(char *)&range_end, 4},
+                         [&](td::Slice key, td::Slice value) -> td::Status {
+                           auto r_key = fetch_tl_object<ton_api::db_blockdb_key_value>(key, true);
+                           if (r_key.is_error()) {
+                             return td::Status::OK();
+                           }
+                           auto r_handle = create_block_handle(value);
+                           if (r_handle.is_ok()) {
+                             f(*r_handle.ok());
+                           }
+                           return td::Status::OK();
+                         });
+}
+
 void ArchiveSlice::do_close() {
   if (destroyed_) {
     return;
@@ -701,7 +726,7 @@ void ArchiveSlice::do_close() {
   id_to_package_.clear();
 }
 
-template<typename T>
+template <typename T>
 td::Promise<T> ArchiveSlice::begin_async_query(td::Promise<T> promise) {
   ++active_queries_;
   return [SelfId = actor_id(this), promise = std::move(promise)](td::Result<T> R) mutable {
@@ -779,7 +804,7 @@ td::Result<ArchiveSlice::PackageInfo *> ArchiveSlice::choose_package(BlockSeqno 
   }
   masterchain_seqno -= (masterchain_seqno - archive_id_) % slice_size_;
   CHECK((masterchain_seqno - archive_id_) % slice_size_ == 0);
-  if (shard_split_depth_ == 0) {
+  if (!shard_separated_) {
     shard_prefix = ShardIdFull{masterchainId};
   } else if (!shard_prefix.is_masterchain()) {
     shard_prefix.shard |= 1;  // In case length is < split depth
@@ -795,7 +820,7 @@ td::Result<ArchiveSlice::PackageInfo *> ArchiveSlice::choose_package(BlockSeqno 
     kv_->set("slices", td::to_string(v + 1)).ensure();
     kv_->set(PSTRING() << "status." << v, "0").ensure();
     kv_->set(PSTRING() << "version." << v, td::to_string(default_package_version())).ensure();
-    if (shard_split_depth_ > 0) {
+    if (shard_separated_) {
       kv_->set(PSTRING() << "info." << v, package_info_to_str(masterchain_seqno, shard_prefix)).ensure();
     }
     commit_transaction();
@@ -808,7 +833,13 @@ td::Result<ArchiveSlice::PackageInfo *> ArchiveSlice::choose_package(BlockSeqno 
 
 void ArchiveSlice::add_package(td::uint32 seqno, ShardIdFull shard_prefix, td::uint64 size, td::uint32 version) {
   PackageId p_id{seqno, key_blocks_only_, temp_};
-  std::string path = PSTRING() << db_root_ << p_id.path() << get_package_file_name(p_id, shard_prefix);
+  std::string path_legacy = PSTRING() << db_root_ << p_id.path() << get_package_file_name(p_id, shard_prefix, true);
+  std::string path;
+  if (td::stat(path_legacy).is_ok()) {
+    path = std::move(path_legacy);
+  } else {
+    path = PSTRING() << db_root_ << p_id.path() << get_package_file_name(p_id, shard_prefix);
+  }
   auto R = Package::open(path, false, true);
   if (R.is_error()) {
     LOG(FATAL) << "failed to open/create archive '" << path << "': " << R.move_as_error();
@@ -1010,7 +1041,7 @@ void ArchiveSlice::truncate(BlockSeqno masterchain_seqno, ConstBlockHandle, td::
     return;
   }
 
-  std::map<ShardIdFull, PackageInfo*> old_packages;
+  std::map<ShardIdFull, PackageInfo *> old_packages;
   std::map<ShardIdFull, std::shared_ptr<Package>> new_packages;
 
   std::string value;
@@ -1051,7 +1082,7 @@ void ArchiveSlice::truncate(BlockSeqno masterchain_seqno, ConstBlockHandle, td::
     truncate_shard(masterchain_seqno, shard, package->seqno, new_packages[package->shard_prefix].get());
   }
 
-  for (auto& [shard_prefix, package] : old_packages) {
+  for (auto &[shard_prefix, package] : old_packages) {
     auto new_package = new_packages[shard_prefix];
     CHECK(new_package);
     package->package = new_package;
@@ -1079,7 +1110,7 @@ void ArchiveSlice::truncate(BlockSeqno masterchain_seqno, ConstBlockHandle, td::
       package.idx = i;
       kv_->set(PSTRING() << "status." << i, td::to_string(package.package->size())).ensure();
       kv_->set(PSTRING() << "version." << i, td::to_string(package.version)).ensure();
-      if (shard_split_depth_ > 0) {
+      if (shard_separated_) {
         kv_->set(PSTRING() << "info." << i, package_info_to_str(package.seqno, package.shard_prefix)).ensure();
       }
       id_to_package_[{package.seqno, package.shard_prefix}] = i;

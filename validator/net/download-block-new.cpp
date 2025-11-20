@@ -16,13 +16,14 @@
 
     Copyright 2017-2020 Telegram Systems LLP
 */
-#include "download-block-new.hpp"
-#include "ton/ton-tl.hpp"
 #include "adnl/utils.hpp"
-#include "ton/ton-shard.h"
 #include "td/utils/overloaded.h"
 #include "ton/ton-io.hpp"
+#include "ton/ton-shard.h"
+#include "ton/ton-tl.hpp"
 #include "validator/full-node.h"
+
+#include "download-block-new.hpp"
 #include "full-node-serializer.hpp"
 
 namespace ton {
@@ -144,7 +145,7 @@ void DownloadBlockNew::got_block_handle(BlockHandle handle) {
     return;
   }
 
-  auto P = td::PromiseCreator::lambda([SelfId = actor_id(this)](td::Result<std::unique_ptr<DownloadToken>> R) {
+  auto P = td::PromiseCreator::lambda([SelfId = actor_id(this)](td::Result<std::unique_ptr<ActionToken>> R) {
     if (R.is_error()) {
       td::actor::send_closure(SelfId, &DownloadBlockNew::abort_query,
                               R.move_as_error_prefix("failed to get download token: "));
@@ -156,7 +157,7 @@ void DownloadBlockNew::got_block_handle(BlockHandle handle) {
                           std::move(P));
 }
 
-void DownloadBlockNew::got_download_token(std::unique_ptr<DownloadToken> token) {
+void DownloadBlockNew::got_download_token(std::unique_ptr<ActionToken> token) {
   token_ = std::move(token);
 
   if (download_from_.is_zero() && client_.empty()) {
@@ -227,7 +228,8 @@ void DownloadBlockNew::got_data(td::BufferSlice data) {
   BlockIdExt id;
   td::BufferSlice proof, block_data;
   bool is_link;
-  td::Status S = deserialize_block_full(*f, id, proof, block_data, is_link, overlay::Overlays::max_fec_broadcast_size());
+  td::Status S =
+      deserialize_block_full(*f, id, proof, block_data, is_link, overlay::Overlays::max_fec_broadcast_size());
   if (S.is_error()) {
     abort_query(S.move_as_error_prefix("cannot deserialize block: "));
     return;

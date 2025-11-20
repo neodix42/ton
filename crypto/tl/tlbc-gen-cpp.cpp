@@ -16,9 +16,10 @@
 
     Copyright 2017-2020 Telegram Systems LLP
 */
-#include "tlbc-gen-cpp.h"
 #include "td/utils/bits.h"
 #include "td/utils/filesystem.h"
+
+#include "tlbc-gen-cpp.h"
 
 namespace tlbc {
 
@@ -217,7 +218,7 @@ unsigned long long CppTypeCode::compute_selector_mask() const {
 
 struct HexConstWriter {
   unsigned long long mask;
-  explicit HexConstWriter(unsigned long long _mask) : mask(_mask){};
+  explicit HexConstWriter(unsigned long long _mask) : mask(_mask) {};
   void write(std::ostream& os) const;
 };
 
@@ -2074,7 +2075,7 @@ void CppTypeCode::generate_skip_field(const Constructor& constr, const Field& fi
     output_cpp_expr(ss, expr, 100);
     ss << '.';
   }
-  ss << "validate_skip_ref(ops, cs, weak)" << tail;
+  ss << "validate_skip_ref(ops, cs, " << (constr.is_special ? "true" : "weak") << ")" << tail;
   actions += Action{ss.str()};
 }
 

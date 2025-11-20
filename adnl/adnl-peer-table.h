@@ -18,18 +18,16 @@
 */
 #pragma once
 
+#include "adnl/adnl-db.h"
+#include "adnl/adnl-query.h"
+#include "auto/tl/ton_api.h"
+#include "common/io.hpp"
 #include "td/actor/actor.h"
 #include "td/utils/BufferedUdp.h"
 
+#include "adnl-packet.h"
 #include "adnl.h"
 #include "utils.hpp"
-#include "adnl/adnl-query.h"
-#include "adnl/adnl-db.h"
-#include "common/io.hpp"
-
-#include "adnl-packet.h"
-
-#include "auto/tl/ton_api.h"
 
 namespace ton {
 
@@ -97,9 +95,7 @@ class AdnlPeerTable : public Adnl {
                                 td::actor::ActorId<AdnlChannel> channel) = 0;
   virtual void unregister_channel(AdnlChannelIdShort id) = 0;
 
-  virtual void add_static_node(AdnlNode node) = 0;
-  virtual void del_static_node(AdnlNodeIdShort id) = 0;
-  virtual void get_static_node(AdnlNodeIdShort id, td::Promise<AdnlNode> promise) = 0;
+  virtual td::Result<AdnlNode> get_static_node(AdnlNodeIdShort id) = 0;
 
   virtual void write_new_addr_list_to_db(AdnlNodeIdShort local_id, AdnlNodeIdShort peer_id, AdnlDbItem node,
                                          td::Promise<td::Unit> promise) = 0;

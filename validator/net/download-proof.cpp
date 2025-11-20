@@ -16,13 +16,14 @@
 
     Copyright 2017-2020 Telegram Systems LLP
 */
-#include "download-proof.hpp"
-#include "ton/ton-tl.hpp"
 #include "adnl/utils.hpp"
-#include "ton/ton-shard.h"
 #include "td/utils/overloaded.h"
 #include "ton/ton-io.hpp"
+#include "ton/ton-shard.h"
+#include "ton/ton-tl.hpp"
 #include "validator/full-node.h"
+
+#include "download-proof.hpp"
 
 namespace ton {
 
@@ -107,7 +108,7 @@ void DownloadProof::start_up() {
 }
 
 void DownloadProof::checked_db() {
-  auto P = td::PromiseCreator::lambda([SelfId = actor_id(this)](td::Result<std::unique_ptr<DownloadToken>> R) {
+  auto P = td::PromiseCreator::lambda([SelfId = actor_id(this)](td::Result<std::unique_ptr<ActionToken>> R) {
     if (R.is_error()) {
       td::actor::send_closure(SelfId, &DownloadProof::abort_query,
                               R.move_as_error_prefix("failed to get download token: "));
@@ -119,7 +120,7 @@ void DownloadProof::checked_db() {
                           std::move(P));
 }
 
-void DownloadProof::got_download_token(std::unique_ptr<DownloadToken> token) {
+void DownloadProof::got_download_token(std::unique_ptr<ActionToken> token) {
   token_ = std::move(token);
 
   if (download_from_.is_zero() && client_.empty()) {

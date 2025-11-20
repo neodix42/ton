@@ -16,19 +16,20 @@
 
     Copyright 2017-2020 Telegram Systems LLP
 */
-#include "keyring.hpp"
 #include "common/errorcode.h"
 #include "common/io.hpp"
-#include "td/utils/port/path.h"
-#include "td/utils/filesystem.h"
 #include "td/utils/Random.h"
+#include "td/utils/filesystem.h"
+#include "td/utils/port/path.h"
+
+#include "keyring.hpp"
 
 namespace ton {
 
 namespace keyring {
 
 KeyringImpl::PrivateKeyDescr::PrivateKeyDescr(PrivateKey private_key, bool is_temp)
-    : public_key(private_key.compute_public_key()), is_temp(is_temp) {
+    : public_key(private_key.compute_public_key()), private_key(private_key), is_temp(is_temp) {
   auto D = private_key.create_decryptor_async();
   D.ensure();
   decryptor_sign = D.move_as_ok();
@@ -43,7 +44,7 @@ void KeyringImpl::start_up() {
   }
 }
 
-td::Result<KeyringImpl::PrivateKeyDescr *> KeyringImpl::load_key(PublicKeyHash key_hash) {
+td::Result<KeyringImpl::PrivateKeyDescr*> KeyringImpl::load_key(PublicKeyHash key_hash) {
   auto it = map_.find(key_hash);
   if (it != map_.end()) {
     return it->second.get();
@@ -188,6 +189,16 @@ void KeyringImpl::decrypt_message(PublicKeyHash key_hash, td::BufferSlice data, 
     td::actor::send_closure(S.move_as_ok()->decryptor_decrypt, &DecryptorAsync::decrypt, std::move(data),
                             std::move(promise));
   }
+}
+
+void KeyringImpl::export_all_private_keys(td::Promise<std::vector<PrivateKey>> promise) {
+  std::vector<PrivateKey> keys;
+  for (auto& [_, descr] : map_) {
+    if (!descr->is_temp && descr->private_key.exportable()) {
+      keys.push_back(descr->private_key);
+    }
+  }
+  promise.set_value(std::move(keys));
 }
 
 td::actor::ActorOwn<Keyring> Keyring::create(std::string db_root) {

@@ -1,9 +1,3 @@
-cmake_minimum_required(VERSION 3.5 FATAL_ERROR)
-
-if (NOT OPENSSL_FOUND)
-  find_package(OpenSSL REQUIRED)
-endif()
-
 set(TON_VALIDATOR_SOURCE
   accept-block.cpp
   block.cpp
@@ -16,6 +10,7 @@ set(TON_VALIDATOR_SOURCE
   ihr-message.cpp
   liteserver.cpp
   message-queue.cpp
+  out-msg-queue-proof.cpp
   proof.cpp
   shard.cpp
   signature-set.cpp
@@ -35,6 +30,7 @@ set(TON_VALIDATOR_SOURCE
   liteserver.hpp
   liteserver-cache.hpp
   message-queue.hpp
+  out-msg-queue-proof.hpp
   proof.hpp
   shard.hpp
   signature-set.hpp

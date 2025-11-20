@@ -16,21 +16,20 @@
 
     Copyright 2017-2020 Telegram Systems LLP
 */
-#include "auto/tl/ton_api.h"
-#include "td/utils/Random.h"
-#include "common/delay.h"
+#include <limits>
 
 #include "adnl/utils.hpp"
-#include "dht/dht.h"
-
-#include "overlay.hpp"
+#include "auto/tl/ton_api.h"
 #include "auto/tl/ton_api.hpp"
-
+#include "common/delay.h"
+#include "dht/dht.h"
 #include "keys/encryptor.h"
+#include "td/utils/Random.h"
 #include "td/utils/Status.h"
 #include "td/utils/StringBuilder.h"
 #include "td/utils/port/signals.h"
-#include <limits>
+
+#include "overlay.hpp"
 
 namespace ton {
 
@@ -63,7 +62,7 @@ td::actor::ActorOwn<Overlay> Overlay::create_private(
   return td::actor::create_actor<OverlayImpl>(
       overlay_actor_name(overlay_id), keyring, adnl, manager, dht_node, local_id, std::move(overlay_id),
       OverlayType::FixedMemberList, std::move(nodes), std::vector<PublicKeyHash>(), OverlayMemberCertificate{},
-      std::move(callback), std::move(rules), std::move(scope));
+      std::move(callback), std::move(rules), std::move(scope), std::move(opts));
 }
 
 td::actor::ActorOwn<Overlay> Overlay::create_semiprivate(
@@ -99,6 +98,7 @@ OverlayImpl::OverlayImpl(td::actor::ActorId<keyring::Keyring> keyring, td::actor
   overlay_id_ = id_full_.compute_short_id();
   frequent_dht_lookup_ = opts_.frequent_dht_lookup_;
   peer_list_.local_member_flags_ = opts_.local_overlay_member_flags_;
+  opts_.broadcast_speed_multiplier_ = std::max(opts_.broadcast_speed_multiplier_, 1e-9);
 
   VLOG(OVERLAY_INFO) << this << ": creating";
 
@@ -131,6 +131,11 @@ void OverlayImpl::process_query(adnl::AdnlNodeIdShort src, ton_api::overlay_getR
     VLOG(OVERLAY_WARNING) << this << ": DROPPING getRandomPeers query from " << src << " in private overlay";
     promise.set_error(td::Status::Error(ErrorCode::protoviolation, "overlay is private"));
   }
+}
+
+void OverlayImpl::process_query(adnl::AdnlNodeIdShort src, ton_api::overlay_ping &query,
+                                td::Promise<td::BufferSlice> promise) {
+  promise.set_value(create_serialize_tl_object<ton_api::overlay_pong>());
 }
 
 void OverlayImpl::process_query(adnl::AdnlNodeIdShort src, ton_api::overlay_getBroadcast &query,
@@ -318,7 +323,7 @@ void OverlayImpl::alarm() {
         }
       }
     } else {
-      VLOG(OVERLAY_WARNING) << "meber certificate ist invalid, valid_until="
+      VLOG(OVERLAY_WARNING) << "member certificate ist invalid, valid_until="
                             << peer_list_.local_cert_is_valid_until_.at_unix();
     }
     if (next_dht_query_ && next_dht_query_.is_in_past() && overlay_type_ == OverlayType::Public) {
@@ -355,8 +360,19 @@ void OverlayImpl::alarm() {
     }
     alarm_timestamp() = td::Timestamp::in(1.0);
   } else {
-    update_neighbours(0);
-    alarm_timestamp() = td::Timestamp::in(60.0 + td::Random::fast(0, 100) * 0.6);
+    if (update_neighbours_at_.is_in_past()) {
+      update_neighbours(0);
+      update_neighbours_at_ = td::Timestamp::in(60.0 + td::Random::fast(0, 100) * 0.6);
+    }
+    if (opts_.private_ping_peers_) {
+      if (private_ping_peers_at_.is_in_past()) {
+        ping_random_peers();
+        private_ping_peers_at_ = td::Timestamp::in(td::Random::fast(30.0, 50.0));
+      }
+      alarm_timestamp().relax(private_ping_peers_at_);
+    }
+    alarm_timestamp().relax(update_neighbours_at_);
+    alarm_timestamp().relax(update_throughput_at_);
   }
 }
 
@@ -482,7 +498,7 @@ void OverlayImpl::send_broadcast(PublicKeyHash send_as, td::uint32 flags, td::Bu
 
 void OverlayImpl::send_broadcast_fec(PublicKeyHash send_as, td::uint32 flags, td::BufferSlice data) {
   if (!has_valid_membership_certificate()) {
-    VLOG(OVERLAY_WARNING) << "meber certificate is invalid, valid_until="
+    VLOG(OVERLAY_WARNING) << "member certificate is invalid, valid_until="
                           << peer_list_.local_cert_is_valid_until_.at_unix();
     return;
   }
@@ -490,7 +506,8 @@ void OverlayImpl::send_broadcast_fec(PublicKeyHash send_as, td::uint32 flags, td
     VLOG(OVERLAY_WARNING) << "broadcast source certificate is invalid";
     return;
   }
-  OverlayOutboundFecBroadcast::create(std::move(data), flags, actor_id(this), send_as);
+  OverlayOutboundFecBroadcast::create(std::move(data), flags, actor_id(this), send_as,
+                                      opts_.broadcast_speed_multiplier_);
 }
 
 void OverlayImpl::print(td::StringBuilder &sb) {
@@ -508,7 +525,7 @@ td::Status OverlayImpl::check_date(td::uint32 date) {
   return td::Status::OK();
 }
 
-BroadcastCheckResult OverlayImpl::check_source_eligible(const PublicKeyHash& source, const Certificate* cert,
+BroadcastCheckResult OverlayImpl::check_source_eligible(const PublicKeyHash &source, const Certificate *cert,
                                                         td::uint32 size, bool is_fec) {
   if (size == 0) {
     return BroadcastCheckResult::Forbidden;
@@ -525,15 +542,15 @@ BroadcastCheckResult OverlayImpl::check_source_eligible(const PublicKeyHash& sou
                         /* skip_check_signature = */ cached);
   if (r2 != BroadcastCheckResult::Forbidden) {
     if (cached_cert == checked_certificates_cache_.end()) {
-      cached_cert = checked_certificates_cache_.emplace(
-          source, std::make_unique<CachedCertificate>(source, cert_hash)).first;
+      cached_cert =
+          checked_certificates_cache_.emplace(source, std::make_unique<CachedCertificate>(source, cert_hash)).first;
     } else {
       cached_cert->second->cert_hash = cert_hash;
       cached_cert->second->remove();
     }
     checked_certificates_cache_lru_.put(cached_cert->second.get());
     while (checked_certificates_cache_.size() > max_checked_certificates_cache_size_) {
-      auto to_remove = (CachedCertificate*)checked_certificates_cache_lru_.get();
+      auto to_remove = (CachedCertificate *)checked_certificates_cache_lru_.get();
       CHECK(to_remove);
       to_remove->remove();
       checked_certificates_cache_.erase(to_remove->source);
@@ -543,7 +560,7 @@ BroadcastCheckResult OverlayImpl::check_source_eligible(const PublicKeyHash& sou
   return broadcast_check_result_max(r, r2);
 }
 
-BroadcastCheckResult OverlayImpl::check_source_eligible(PublicKey source, const Certificate* cert, td::uint32 size,
+BroadcastCheckResult OverlayImpl::check_source_eligible(PublicKey source, const Certificate *cert, td::uint32 size,
                                                         bool is_fec) {
   return check_source_eligible(source.compute_short_id(), cert, size, is_fec);
 }
@@ -718,6 +735,9 @@ void OverlayImpl::get_stats(td::Promise<tl_object_ptr<ton_api::engine_validator_
     node_obj->is_neighbour_ = peer.is_neighbour();
     node_obj->is_alive_ = peer.is_alive();
     node_obj->node_flags_ = peer.get_node()->flags();
+
+    node_obj->last_ping_at_ = (peer.last_ping_at ? peer.last_ping_at.at_unix() : -1.0);
+    node_obj->last_ping_time_ = peer.last_ping_time;
 
     res->nodes_.push_back(std::move(node_obj));
   });

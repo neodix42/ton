@@ -16,13 +16,15 @@
 
     Copyright 2017-2020 Telegram Systems LLP
 */
-#include "full-node.hpp"
-#include "ton/ton-io.hpp"
-#include "td/actor/MultiPromise.h"
-#include "full-node.h"
 #include "common/delay.h"
+#include "impl/out-msg-queue-proof.hpp"
+#include "td/actor/MultiPromise.h"
 #include "td/utils/Random.h"
+#include "ton/ton-io.hpp"
 #include "ton/ton-tl.hpp"
+
+#include "full-node.h"
+#include "full-node.hpp"
 
 namespace ton {
 
@@ -39,7 +41,6 @@ void FullNodeImpl::add_permanent_key(PublicKeyHash key, td::Promise<td::Unit> pr
   }
 
   local_keys_.insert(key);
-  create_private_block_overlay(key);
   for (auto &p : custom_overlays_) {
     update_custom_overlay(p.second);
   }
@@ -69,7 +70,6 @@ void FullNodeImpl::del_permanent_key(PublicKeyHash key, td::Promise<td::Unit> pr
     return;
   }
   local_keys_.erase(key);
-  private_block_overlays_.erase(key);
   update_validator_telemetry_collector();
   for (auto &p : custom_overlays_) {
     update_custom_overlay(p.second);
@@ -95,10 +95,20 @@ void FullNodeImpl::del_permanent_key(PublicKeyHash key, td::Promise<td::Unit> pr
   promise.set_value(td::Unit());
 }
 
+void FullNodeImpl::add_collator_adnl_id(adnl::AdnlNodeIdShort id) {
+  ++local_collator_nodes_[id];
+}
+
+void FullNodeImpl::del_collator_adnl_id(adnl::AdnlNodeIdShort id) {
+  if (--local_collator_nodes_[id] == 0) {
+    local_collator_nodes_.erase(id);
+  }
+}
+
 void FullNodeImpl::sign_shard_overlay_certificate(ShardIdFull shard_id, PublicKeyHash signed_key, td::uint32 expiry_at,
                                                   td::uint32 max_size, td::Promise<td::BufferSlice> promise) {
   auto it = shards_.find(shard_id);
-  if(it == shards_.end() || it->second.actor.empty()) {
+  if (it == shards_.end() || it->second.actor.empty()) {
     promise.set_error(td::Status::Error(ErrorCode::error, "shard not found"));
     return;
   }
@@ -110,7 +120,7 @@ void FullNodeImpl::import_shard_overlay_certificate(ShardIdFull shard_id, Public
                                                     std::shared_ptr<ton::overlay::Certificate> cert,
                                                     td::Promise<td::Unit> promise) {
   auto it = shards_.find(shard_id);
-  if(it == shards_.end() || it->second.actor.empty()) {
+  if (it == shards_.end() || it->second.actor.empty()) {
     promise.set_error(td::Status::Error(ErrorCode::error, "shard not found"));
     return;
   }
@@ -138,16 +148,13 @@ void FullNodeImpl::update_adnl_id(adnl::AdnlNodeIdShort adnl_id, td::Promise<td:
 }
 
 void FullNodeImpl::set_config(FullNodeConfig config) {
-  config_ = config;
-  for (auto& s : shards_) {
+  opts_.config_ = config;
+  for (auto &s : shards_) {
     if (!s.second.actor.empty()) {
       td::actor::send_closure(s.second.actor, &FullNodeShard::set_config, config);
     }
   }
-  for (auto& overlay : private_block_overlays_) {
-    td::actor::send_closure(overlay.second, &FullNodePrivateBlockOverlay::set_config, config);
-  }
-  for (auto& overlay : custom_overlays_) {
+  for (auto &overlay : custom_overlays_) {
     for (auto &actor : overlay.second.actors_) {
       td::actor::send_closure(actor.second, &FullNodeCustomOverlay::set_config, config);
     }
@@ -229,7 +236,7 @@ void FullNodeImpl::on_new_masterchain_block(td::Ref<MasterchainState> state, std
     }
   }
 
-  for (auto it = shards_.begin(); it != shards_.end(); ) {
+  for (auto it = shards_.begin(); it != shards_.end();) {
     if (all_shards.contains(it->first)) {
       ++it;
     } else {
@@ -250,12 +257,32 @@ void FullNodeImpl::on_new_masterchain_block(td::Ref<MasterchainState> state, std
       shard_info.delete_at = td::Timestamp::never();
     }
   }
+
+  std::set<adnl::AdnlNodeIdShort> my_adnl_ids;
+  my_adnl_ids.insert(adnl_id_);
+  for (const auto &[adnl_id, _] : local_collator_nodes_) {
+    my_adnl_ids.insert(adnl_id);
+  }
+  for (auto key : local_keys_) {
+    auto it = current_validators_.find(key);
+    if (it != current_validators_.end()) {
+      my_adnl_ids.insert(it->second);
+    }
+  }
+  std::set<ShardIdFull> monitoring_shards;
+  for (ShardIdFull shard : shards_to_monitor) {
+    monitoring_shards.insert(cut_shard(shard));
+  }
+  fast_sync_overlays_.update_overlays(state, std::move(my_adnl_ids), std::move(monitoring_shards),
+                                      zero_state_file_hash_, keyring_, adnl_, overlays_, validator_manager_,
+                                      actor_id(this));
+  update_validator_telemetry_collector();
 }
 
 void FullNodeImpl::update_shard_actor(ShardIdFull shard, bool active) {
   ShardInfo &info = shards_[shard];
   if (info.actor.empty()) {
-    info.actor = FullNodeShard::create(shard, local_id_, adnl_id_, zero_state_file_hash_, config_, keyring_, adnl_, rldp_,
+    info.actor = FullNodeShard::create(shard, local_id_, adnl_id_, zero_state_file_hash_, opts_, keyring_, adnl_, rldp_,
                                        rldp2_, overlays_, validator_manager_, client_, actor_id(this), active);
     if (!all_validators_.empty()) {
       td::actor::send_closure(info.actor, &FullNodeShard::update_validators, all_validators_, sign_cert_by_);
@@ -281,21 +308,28 @@ void FullNodeImpl::send_ihr_message(AccountIdPrefixFull dst, td::BufferSlice dat
 }
 
 void FullNodeImpl::send_ext_message(AccountIdPrefixFull dst, td::BufferSlice data) {
-  auto shard = get_shard(dst);
-  if (shard.empty()) {
-    VLOG(FULL_NODE_WARNING) << "dropping OUT ext message to unknown shard";
-    return;
-  }
+  bool skip_public = false;
   for (auto &[_, private_overlay] : custom_overlays_) {
     if (private_overlay.params_.send_shard(dst.as_leaf_shard())) {
       for (auto &[local_id, actor] : private_overlay.actors_) {
         if (private_overlay.params_.msg_senders_.contains(local_id)) {
           td::actor::send_closure(actor, &FullNodeCustomOverlay::send_external_message, data.clone());
+          if (private_overlay.params_.skip_public_msg_send_) {
+            skip_public = true;
+          }
         }
       }
     }
   }
-  td::actor::send_closure(shard, &FullNodeShard::send_external_message, std::move(data));
+
+  if (!skip_public) {
+    auto shard = get_shard(dst);
+    if (shard.empty()) {
+      VLOG(FULL_NODE_WARNING) << "dropping OUT ext message to unknown shard";
+      return;
+    }
+    td::actor::send_closure(shard, &FullNodeShard::send_external_message, std::move(data));
+  }
 }
 
 void FullNodeImpl::send_shard_block_info(BlockIdExt block_id, CatchainSeqno cc_seqno, td::BufferSlice data) {
@@ -304,28 +338,42 @@ void FullNodeImpl::send_shard_block_info(BlockIdExt block_id, CatchainSeqno cc_s
     VLOG(FULL_NODE_WARNING) << "dropping OUT shard block info message to unknown shard";
     return;
   }
-  if (!private_block_overlays_.empty()) {
-    td::actor::send_closure(private_block_overlays_.begin()->second,
-                            &FullNodePrivateBlockOverlay::send_shard_block_info, block_id, cc_seqno, data.clone());
+  auto fast_sync_overlay = fast_sync_overlays_.choose_overlay(ShardIdFull(masterchainId)).first;
+  if (!fast_sync_overlay.empty()) {
+    td::actor::send_closure(fast_sync_overlay, &FullNodeFastSyncOverlay::send_shard_block_info, block_id, cc_seqno,
+                            data.clone());
   }
   td::actor::send_closure(shard, &FullNodeShard::send_shard_block_info, block_id, cc_seqno, std::move(data));
 }
 
 void FullNodeImpl::send_block_candidate(BlockIdExt block_id, CatchainSeqno cc_seqno, td::uint32 validator_set_hash,
-                                        td::BufferSlice data) {
-  send_block_candidate_broadcast_to_custom_overlays(block_id, cc_seqno, validator_set_hash, data);
-  auto shard = get_shard(ShardIdFull{masterchainId, shardIdAll});
-  if (shard.empty()) {
-    VLOG(FULL_NODE_WARNING) << "dropping OUT shard block info message to unknown shard";
-    return;
+                                        td::BufferSlice data, int mode) {
+  if (mode & broadcast_mode_custom) {
+    send_block_candidate_broadcast_to_custom_overlays(block_id, cc_seqno, validator_set_hash, data);
   }
-  if (!private_block_overlays_.empty()) {
-    td::actor::send_closure(private_block_overlays_.begin()->second, &FullNodePrivateBlockOverlay::send_block_candidate,
-                            block_id, cc_seqno, validator_set_hash, data.clone());
+  if (mode & broadcast_mode_fast_sync) {
+    auto fast_sync_overlay = fast_sync_overlays_.choose_overlay(block_id.shard_full()).first;
+    if (!fast_sync_overlay.empty()) {
+      td::actor::send_closure(fast_sync_overlay, &FullNodeFastSyncOverlay::send_block_candidate, block_id, cc_seqno,
+                              validator_set_hash, data.clone());
+    }
   }
-  if (broadcast_block_candidates_in_public_overlay_) {
+  if (mode & broadcast_mode_public) {
+    auto shard = get_shard(ShardIdFull{masterchainId, shardIdAll});
+    if (shard.empty()) {
+      VLOG(FULL_NODE_WARNING) << "dropping OUT shard block info message to unknown shard";
+      return;
+    }
     td::actor::send_closure(shard, &FullNodeShard::send_block_candidate, block_id, cc_seqno, validator_set_hash,
                             std::move(data));
+  }
+}
+
+void FullNodeImpl::send_out_msg_queue_proof_broadcast(td::Ref<OutMsgQueueProofBroadcast> broadcast) {
+  auto fast_sync_overlay = fast_sync_overlays_.choose_overlay(broadcast->dst_shard).first;
+  if (!fast_sync_overlay.empty()) {
+    td::actor::send_closure(fast_sync_overlay, &FullNodeFastSyncOverlay::send_out_msg_queue_proof_broadcast,
+                            std::move(broadcast));
   }
 }
 
@@ -333,18 +381,18 @@ void FullNodeImpl::send_broadcast(BlockBroadcast broadcast, int mode) {
   if (mode & broadcast_mode_custom) {
     send_block_broadcast_to_custom_overlays(broadcast);
   }
-  auto shard = get_shard(broadcast.block_id.shard_full());
-  if (shard.empty()) {
-    VLOG(FULL_NODE_WARNING) << "dropping OUT broadcast to unknown shard";
-    return;
-  }
-  if (mode & broadcast_mode_private_block) {
-    if (!private_block_overlays_.empty()) {
-      td::actor::send_closure(private_block_overlays_.begin()->second, &FullNodePrivateBlockOverlay::send_broadcast,
-                              broadcast.clone());
+  if (mode & broadcast_mode_fast_sync) {
+    auto fast_sync_overlay = fast_sync_overlays_.choose_overlay(broadcast.block_id.shard_full()).first;
+    if (!fast_sync_overlay.empty()) {
+      td::actor::send_closure(fast_sync_overlay, &FullNodeFastSyncOverlay::send_broadcast, broadcast.clone());
     }
   }
   if (mode & broadcast_mode_public) {
+    auto shard = get_shard(broadcast.block_id.shard_full());
+    if (shard.empty()) {
+      VLOG(FULL_NODE_WARNING) << "dropping OUT broadcast to unknown shard";
+      return;
+    }
     td::actor::send_closure(shard, &FullNodeShard::send_broadcast, std::move(broadcast));
   }
 }
@@ -371,16 +419,17 @@ void FullNodeImpl::download_zero_state(BlockIdExt id, td::uint32 priority, td::T
   td::actor::send_closure(shard, &FullNodeShard::download_zero_state, id, priority, timeout, std::move(promise));
 }
 
-void FullNodeImpl::download_persistent_state(BlockIdExt id, BlockIdExt masterchain_block_id, td::uint32 priority,
-                                             td::Timestamp timeout, td::Promise<td::BufferSlice> promise) {
-  auto shard = get_shard(id.shard_full());
+void FullNodeImpl::download_persistent_state(BlockIdExt id, BlockIdExt masterchain_block_id, PersistentStateType type,
+                                             td::uint32 priority, td::Timestamp timeout,
+                                             td::Promise<td::BufferSlice> promise) {
+  auto shard = get_shard(id.shard_full(), /* historical = */ true);
   if (shard.empty()) {
     VLOG(FULL_NODE_WARNING) << "dropping download state diff query to unknown shard";
     promise.set_error(td::Status::Error(ErrorCode::notready, "shard not ready"));
     return;
   }
-  td::actor::send_closure(shard, &FullNodeShard::download_persistent_state, id, masterchain_block_id, priority, timeout,
-                          std::move(promise));
+  td::actor::send_closure(shard, &FullNodeShard::download_persistent_state, id, masterchain_block_id, type, priority,
+                          timeout, std::move(promise));
 }
 
 void FullNodeImpl::download_block_proof(BlockIdExt block_id, td::uint32 priority, td::Timestamp timeout,
@@ -396,7 +445,7 @@ void FullNodeImpl::download_block_proof(BlockIdExt block_id, td::uint32 priority
 
 void FullNodeImpl::download_block_proof_link(BlockIdExt block_id, td::uint32 priority, td::Timestamp timeout,
                                              td::Promise<td::BufferSlice> promise) {
-  auto shard = get_shard(block_id.shard_full());
+  auto shard = get_shard(block_id.shard_full(), /* historical = */ true);
   if (shard.empty()) {
     VLOG(FULL_NODE_WARNING) << "dropping download proof link query to unknown shard";
     promise.set_error(td::Status::Error(ErrorCode::notready, "shard not ready"));
@@ -418,8 +467,8 @@ void FullNodeImpl::get_next_key_blocks(BlockIdExt block_id, td::Timestamp timeou
 }
 
 void FullNodeImpl::download_archive(BlockSeqno masterchain_seqno, ShardIdFull shard_prefix, std::string tmp_dir,
-                      td::Timestamp timeout, td::Promise<std::string> promise) {
-  auto shard = get_shard(shard_prefix);
+                                    td::Timestamp timeout, td::Promise<std::string> promise) {
+  auto shard = get_shard(shard_prefix, /* historical = */ true);
   if (shard.empty()) {
     VLOG(FULL_NODE_WARNING) << "dropping download archive query to unknown shard";
     promise.set_error(td::Status::Error(ErrorCode::notready, "shard not ready"));
@@ -430,7 +479,25 @@ void FullNodeImpl::download_archive(BlockSeqno masterchain_seqno, ShardIdFull sh
                           timeout, std::move(promise));
 }
 
-td::actor::ActorId<FullNodeShard> FullNodeImpl::get_shard(ShardIdFull shard) {
+void FullNodeImpl::download_out_msg_queue_proof(ShardIdFull dst_shard, std::vector<BlockIdExt> blocks,
+                                                block::ImportedMsgQueueLimits limits, td::Timestamp timeout,
+                                                td::Promise<std::vector<td::Ref<OutMsgQueueProof>>> promise) {
+  if (blocks.empty()) {
+    promise.set_value({});
+    return;
+  }
+  // All blocks are expected to have the same minsplit shard prefix
+  auto shard = get_shard(blocks[0].shard_full());
+  if (shard.empty()) {
+    VLOG(FULL_NODE_WARNING) << "dropping download msg queue query to unknown shard";
+    promise.set_error(td::Status::Error(ErrorCode::notready, "shard not ready"));
+    return;
+  }
+  td::actor::send_closure(shard, &FullNodeShard::download_out_msg_queue_proof, dst_shard, std::move(blocks), limits,
+                          timeout, std::move(promise));
+}
+
+td::actor::ActorId<FullNodeShard> FullNodeImpl::get_shard(ShardIdFull shard, bool historical) {
   if (shard.is_masterchain()) {
     return shards_[ShardIdFull{masterchainId}].actor.get();
   }
@@ -438,13 +505,23 @@ td::actor::ActorId<FullNodeShard> FullNodeImpl::get_shard(ShardIdFull shard) {
     return {};
   }
   int pfx_len = shard.pfx_len();
-  if (pfx_len > wc_monitor_min_split_) {
-    shard = shard_prefix(shard, wc_monitor_min_split_);
+  int min_split = wc_monitor_min_split_;
+  if (historical) {
+    min_split = td::Random::fast(0, min_split);
   }
-  auto it = shards_.find(shard);
-  if (it != shards_.end()) {
-    update_shard_actor(shard, it->second.active);
-    return it->second.actor.get();
+  if (pfx_len > min_split) {
+    shard = shard_prefix(shard, min_split);
+  }
+  while (true) {
+    auto it = shards_.find(shard);
+    if (it != shards_.end()) {
+      update_shard_actor(shard, it->second.active);
+      return it->second.actor.get();
+    }
+    if (shard.pfx_len() == 0) {
+      break;
+    }
+    shard = shard_parent(shard);
   }
 
   // Special case if shards_ was not yet initialized.
@@ -526,18 +603,9 @@ void FullNodeImpl::new_key_block(BlockHandle handle) {
   }
 }
 
-void FullNodeImpl::send_validator_telemetry(PublicKeyHash key, tl_object_ptr<ton_api::validator_telemetry> telemetry) {
-  auto it = private_block_overlays_.find(key);
-  if (it == private_block_overlays_.end()) {
-    VLOG(FULL_NODE_INFO) << "Cannot send validator telemetry for " << key << " : no private block overlay";
-    return;
-  }
-  td::actor::send_closure(it->second, &FullNodePrivateBlockOverlay::send_validator_telemetry, std::move(telemetry));
-}
-
 void FullNodeImpl::process_block_broadcast(BlockBroadcast broadcast) {
   send_block_broadcast_to_custom_overlays(broadcast);
-  td::actor::send_closure(validator_manager_, &ValidatorManagerInterface::prevalidate_block, std::move(broadcast),
+  td::actor::send_closure(validator_manager_, &ValidatorManagerInterface::new_block_broadcast, std::move(broadcast),
                           [](td::Result<td::Unit> R) {
                             if (R.is_error()) {
                               if (R.error().code() == ErrorCode::notready) {
@@ -553,8 +621,13 @@ void FullNodeImpl::process_block_candidate_broadcast(BlockIdExt block_id, Catcha
                                                      td::uint32 validator_set_hash, td::BufferSlice data) {
   send_block_candidate_broadcast_to_custom_overlays(block_id, cc_seqno, validator_set_hash, data);
   // ignore cc_seqno and validator_hash for now
-  td::actor::send_closure(validator_manager_, &ValidatorManagerInterface::new_block_candidate, block_id,
+  td::actor::send_closure(validator_manager_, &ValidatorManagerInterface::new_block_candidate_broadcast, block_id,
                           std::move(data));
+}
+
+void FullNodeImpl::get_out_msg_queue_query_token(td::Promise<std::unique_ptr<ActionToken>> promise) {
+  td::actor::send_closure(out_msg_queue_query_token_manager_, &TokenManager::get_token, 1, 0, td::Timestamp::in(10.0),
+                          std::move(promise));
 }
 
 void FullNodeImpl::set_validator_telemetry_filename(std::string value) {
@@ -563,15 +636,18 @@ void FullNodeImpl::set_validator_telemetry_filename(std::string value) {
 }
 
 void FullNodeImpl::update_validator_telemetry_collector() {
-  if (validator_telemetry_filename_.empty() || private_block_overlays_.empty()) {
+  if (validator_telemetry_filename_.empty()) {
     validator_telemetry_collector_key_ = PublicKeyHash::zero();
     return;
   }
-  if (!private_block_overlays_.contains(validator_telemetry_collector_key_)) {
-    auto it = private_block_overlays_.begin();
-    validator_telemetry_collector_key_ = it->first;
-    td::actor::send_closure(it->second, &FullNodePrivateBlockOverlay::collect_validator_telemetry,
-                            validator_telemetry_filename_);
+  if (fast_sync_overlays_.get_masterchain_overlay_for(adnl::AdnlNodeIdShort{validator_telemetry_collector_key_})
+          .empty()) {
+    auto [actor, adnl_id] = fast_sync_overlays_.choose_overlay(ShardIdFull{masterchainId});
+    validator_telemetry_collector_key_ = adnl_id.pubkey_hash();
+    if (!actor.empty()) {
+      td::actor::send_closure(actor, &FullNodeFastSyncOverlay::collect_validator_telemetry,
+                              validator_telemetry_filename_);
+    }
   }
 }
 
@@ -606,9 +682,12 @@ void FullNodeImpl::start_up() {
       td::actor::send_closure(id_, &FullNodeImpl::send_shard_block_info, block_id, cc_seqno, std::move(data));
     }
     void send_block_candidate(BlockIdExt block_id, CatchainSeqno cc_seqno, td::uint32 validator_set_hash,
-                              td::BufferSlice data) override {
+                              td::BufferSlice data, int mode) override {
       td::actor::send_closure(id_, &FullNodeImpl::send_block_candidate, block_id, cc_seqno, validator_set_hash,
-                              std::move(data));
+                              std::move(data), mode);
+    }
+    void send_out_msg_queue_proof_broadcast(td::Ref<OutMsgQueueProofBroadcast> broadcast) override {
+      td::actor::send_closure(id_, &FullNodeImpl::send_out_msg_queue_proof_broadcast, std::move(broadcast));
     }
     void send_broadcast(BlockBroadcast broadcast, int mode) override {
       td::actor::send_closure(id_, &FullNodeImpl::send_broadcast, std::move(broadcast), mode);
@@ -621,9 +700,10 @@ void FullNodeImpl::start_up() {
                              td::Promise<td::BufferSlice> promise) override {
       td::actor::send_closure(id_, &FullNodeImpl::download_zero_state, id, priority, timeout, std::move(promise));
     }
-    void download_persistent_state(BlockIdExt id, BlockIdExt masterchain_block_id, td::uint32 priority,
-                                   td::Timestamp timeout, td::Promise<td::BufferSlice> promise) override {
-      td::actor::send_closure(id_, &FullNodeImpl::download_persistent_state, id, masterchain_block_id, priority,
+    void download_persistent_state(BlockIdExt id, BlockIdExt masterchain_block_id, PersistentStateType type,
+                                   td::uint32 priority, td::Timestamp timeout,
+                                   td::Promise<td::BufferSlice> promise) override {
+      td::actor::send_closure(id_, &FullNodeImpl::download_persistent_state, id, masterchain_block_id, type, priority,
                               timeout, std::move(promise));
     }
     void download_block_proof(BlockIdExt block_id, td::uint32 priority, td::Timestamp timeout,
@@ -645,12 +725,15 @@ void FullNodeImpl::start_up() {
       td::actor::send_closure(id_, &FullNodeImpl::download_archive, masterchain_seqno, shard_prefix, std::move(tmp_dir),
                               timeout, std::move(promise));
     }
+    void download_out_msg_queue_proof(ShardIdFull dst_shard, std::vector<BlockIdExt> blocks,
+                                      block::ImportedMsgQueueLimits limits, td::Timestamp timeout,
+                                      td::Promise<std::vector<td::Ref<OutMsgQueueProof>>> promise) override {
+      td::actor::send_closure(id_, &FullNodeImpl::download_out_msg_queue_proof, dst_shard, std::move(blocks), limits,
+                              timeout, std::move(promise));
+    }
 
     void new_key_block(BlockHandle handle) override {
       td::actor::send_closure(id_, &FullNodeImpl::new_key_block, std::move(handle));
-    }
-    void send_validator_telemetry(PublicKeyHash key, tl_object_ptr<ton_api::validator_telemetry> telemetry) override {
-      td::actor::send_closure(id_, &FullNodeImpl::send_validator_telemetry, key, std::move(telemetry));
     }
 
     explicit Callback(td::actor::ActorId<FullNodeImpl> id) : id_(id) {
@@ -669,27 +752,9 @@ void FullNodeImpl::update_private_overlays() {
     update_custom_overlay(p.second);
   }
 
-  private_block_overlays_.clear();
   update_validator_telemetry_collector();
   if (local_keys_.empty()) {
     return;
-  }
-  for (const auto &key : local_keys_) {
-    create_private_block_overlay(key);
-  }
-}
-
-void FullNodeImpl::create_private_block_overlay(PublicKeyHash key) {
-  CHECK(local_keys_.count(key));
-  if (current_validators_.count(key)) {
-    std::vector<adnl::AdnlNodeIdShort> nodes;
-    for (const auto &p : current_validators_) {
-      nodes.push_back(p.second);
-    }
-    private_block_overlays_[key] = td::actor::create_actor<FullNodePrivateBlockOverlay>(
-        "BlocksPrivateOverlay", current_validators_[key], std::move(nodes), zero_state_file_hash_, config_, keyring_,
-        adnl_, rldp_, rldp2_, overlays_, validator_manager_, actor_id(this));
-    update_validator_telemetry_collector();
   }
 }
 
@@ -705,8 +770,8 @@ void FullNodeImpl::update_custom_overlay(CustomOverlayInfo &overlay) {
         old_actors.erase(it);
       } else {
         overlay.actors_[local_id] = td::actor::create_actor<FullNodeCustomOverlay>(
-            "CustomOverlay", local_id, params, zero_state_file_hash_, config_, keyring_, adnl_, rldp_, rldp2_,
-            overlays_, validator_manager_, actor_id(this));
+            "CustomOverlay", local_id, params, zero_state_file_hash_, opts_, keyring_, adnl_, rldp_, rldp2_, overlays_,
+            validator_manager_, actor_id(this));
       }
     }
   };
@@ -764,7 +829,7 @@ void FullNodeImpl::send_block_candidate_broadcast_to_custom_overlays(const Block
 }
 
 FullNodeImpl::FullNodeImpl(PublicKeyHash local_id, adnl::AdnlNodeIdShort adnl_id, FileHash zero_state_file_hash,
-                           FullNodeConfig config, td::actor::ActorId<keyring::Keyring> keyring,
+                           FullNodeOptions opts, td::actor::ActorId<keyring::Keyring> keyring,
                            td::actor::ActorId<adnl::Adnl> adnl, td::actor::ActorId<rldp::Rldp> rldp,
                            td::actor::ActorId<rldp2::Rldp> rldp2, td::actor::ActorId<dht::Dht> dht,
                            td::actor::ActorId<overlay::Overlays> overlays,
@@ -784,17 +849,17 @@ FullNodeImpl::FullNodeImpl(PublicKeyHash local_id, adnl::AdnlNodeIdShort adnl_id
     , client_(client)
     , db_root_(db_root)
     , started_promise_(std::move(started_promise))
-    , config_(config) {
+    , opts_(opts) {
 }
 
 td::actor::ActorOwn<FullNode> FullNode::create(
-    ton::PublicKeyHash local_id, adnl::AdnlNodeIdShort adnl_id, FileHash zero_state_file_hash, FullNodeConfig config,
+    ton::PublicKeyHash local_id, adnl::AdnlNodeIdShort adnl_id, FileHash zero_state_file_hash, FullNodeOptions opts,
     td::actor::ActorId<keyring::Keyring> keyring, td::actor::ActorId<adnl::Adnl> adnl,
     td::actor::ActorId<rldp::Rldp> rldp, td::actor::ActorId<rldp2::Rldp> rldp2, td::actor::ActorId<dht::Dht> dht,
     td::actor::ActorId<overlay::Overlays> overlays, td::actor::ActorId<ValidatorManagerInterface> validator_manager,
     td::actor::ActorId<adnl::AdnlExtClient> client, std::string db_root, td::Promise<td::Unit> started_promise) {
-  return td::actor::create_actor<FullNodeImpl>("fullnode", local_id, adnl_id, zero_state_file_hash, config, keyring,
-                                               adnl, rldp, rldp2, dht, overlays, validator_manager, client, db_root,
+  return td::actor::create_actor<FullNodeImpl>("fullnode", local_id, adnl_id, zero_state_file_hash, opts, keyring, adnl,
+                                               rldp, rldp2, dht, overlays, validator_manager, client, db_root,
                                                std::move(started_promise));
 }
 
@@ -818,7 +883,7 @@ bool CustomOverlayParams::send_shard(const ShardIdFull &shard) const {
                      [&](const ShardIdFull &our_shard) { return shard_intersects(shard, our_shard); });
 }
 
-CustomOverlayParams CustomOverlayParams::fetch(const ton_api::engine_validator_customOverlay& f) {
+CustomOverlayParams CustomOverlayParams::fetch(const ton_api::engine_validator_customOverlay &f) {
   CustomOverlayParams c;
   c.name_ = f.name_;
   for (const auto &node : f.nodes_) {
@@ -833,6 +898,7 @@ CustomOverlayParams CustomOverlayParams::fetch(const ton_api::engine_validator_c
   for (const auto &shard : f.sender_shards_) {
     c.sender_shards_.push_back(create_shard_id(shard));
   }
+  c.skip_public_msg_send_ = f.skip_public_msg_send_;
   return c;
 }
 

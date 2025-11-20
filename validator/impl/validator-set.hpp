@@ -18,13 +18,13 @@
 */
 #pragma once
 
-#include "validator/interfaces/validator-set.h"
-#include "validator/interfaces/signature-set.h"
-#include "ton/ton-types.h"
-#include "keys/encryptor.h"
-#include "block/mc-config.h"
-
 #include <map>
+
+#include "block/mc-config.h"
+#include "keys/encryptor.h"
+#include "ton/ton-types.h"
+#include "validator/interfaces/signature-set.h"
+#include "validator/interfaces/validator-set.h"
 
 namespace ton {
 
@@ -74,7 +74,7 @@ class ValidatorSetCompute {
 
  private:
   const block::Config* config_{nullptr};
-  std::unique_ptr<block::ValidatorSet> cur_validators_, next_validators_;
+  std::shared_ptr<block::ValidatorSet> cur_validators_, next_validators_;
   td::Ref<ValidatorSet> compute_validator_set(ShardIdFull shard, const block::ValidatorSet& vset, UnixTime time,
                                               CatchainSeqno seqno) const;
 };
