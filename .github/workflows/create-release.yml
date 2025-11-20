@@ -217,7 +217,7 @@ jobs:
         uses: svenstaro/upload-release-action@v2
         with:
           repo_token: ${{ secrets.GITHUB_TOKEN }}
-          file: artifacts/ton-x86-64-windows/proxy-liteserver.exe
+          file: artifacts/ton-win-binaries/proxy-liteserver.exe
           asset_name: proxy-liteserver.exe
           tag: ${{ steps.tag.outputs.TAG }}
 
@@ -323,7 +323,7 @@ jobs:
         uses: svenstaro/upload-release-action@v2
         with:
           repo_token: ${{ secrets.GITHUB_TOKEN }}
-          file: artifacts/ton-x86_64-macos/proxy-liteserver
+          file: artifacts/ton-x86_64-macos-binaries/proxy-liteserver
           asset_name: proxy-liteserver-mac-x86-64
           tag: ${{ steps.tag.outputs.TAG }}
 
@@ -430,7 +430,7 @@ jobs:
         uses: svenstaro/upload-release-action@v2
         with:
           repo_token: ${{ secrets.GITHUB_TOKEN }}
-          file: artifacts/ton-arm64-macos/proxy-liteserver
+          file: artifacts/ton-arm64-macos-binaries/proxy-liteserver
           asset_name: proxy-liteserver-mac-arm64
           tag: ${{ steps.tag.outputs.TAG }}
 
@@ -544,7 +544,7 @@ jobs:
         uses: svenstaro/upload-release-action@v2
         with:
           repo_token: ${{ secrets.GITHUB_TOKEN }}
-          file: artifacts/ton-x86_64-linux/proxy-liteserver
+          file: artifacts/ton-x86_64-linux-binaries/proxy-liteserver
           asset_name: proxy-liteserver-linux-x86_64
           tag: ${{ steps.tag.outputs.TAG }}
 
@@ -684,7 +684,19 @@ jobs:
         with:
           repo_token: ${{ secrets.GITHUB_TOKEN }}
           file: artifacts/ton-arm64-linux/storage-daemon
-          asset_name: storage-daemon-linux-arm64
+          asset_namename: Clear all GH cache
+
+on:
+  workflow_dispatch
+
+jobs:
+  clear-cache:
+    env:
+      GH_TOKEN: ${{ github.token }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Clear all cache
+        run: gh cache delete --all: storage-daemon-linux-arm64
           tag: ${{ steps.tag.outputs.TAG }}
 
       - name: Upload Linux arm64 single artifact - tonlibjson
