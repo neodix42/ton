@@ -85,6 +85,7 @@
 #include "git.h"
 
 #if TON_USE_JEMALLOC
+#define JEMALLOC_MANGLE 1
 #include <jemalloc/jemalloc.h>
 #endif
 
