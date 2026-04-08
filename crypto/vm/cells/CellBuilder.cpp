@@ -42,6 +42,11 @@ CellBuilder::CellBuilder() : bits(0), refs_cnt(0) {
   get_thread_safe_counter().add(+1);
 }
 
+CellBuilder::CellBuilder(CellBuilder&& other)
+    : bits(std::exchange(other.bits, 0)), refs_cnt(std::exchange(other.refs_cnt, 0)), refs(std::move(other.refs)) {
+  std::memcpy(data, other.data, (bits + 7) >> 3);
+}
+
 Ref<DataCell> CellBuilder::finalize_copy(bool special) const {
   auto* vm_state_interface = VmStateInterface::get();
   if (vm_state_interface) {

@@ -228,6 +228,11 @@ struct Op;
 struct OpList {
   std::vector<std::unique_ptr<Op>> list;
 
+  OpList() = default;
+  OpList(OpList&&);
+  OpList& operator=(OpList&&);
+  ~OpList();
+
   // container interface (forwarding to inner vector)
   bool empty() const { return list.empty(); }
   size_t size() const { return list.size(); }
@@ -235,17 +240,11 @@ struct OpList {
   const std::unique_ptr<Op>& operator[](size_t i) const { return list[i]; }
   const std::unique_ptr<Op>& front() const { return list.front(); }
   std::unique_ptr<Op>& back() { return list.back(); }
-  void clear() { list.clear(); }
+  void clear();
 
-  Op& push_back(std::unique_ptr<Op> op) {
-    list.push_back(std::move(op));
-    return *list.back();
-  }
+  Op& push_back(std::unique_ptr<Op> op);
   template<typename... Args>
-  Op& push_back(Args&&... args) {
-    list.push_back(std::make_unique<Op>(std::forward<Args>(args)...));
-    return *list.back();
-  }
+  Op& push_back(Args&&... args);
 
   using iterator = std::vector<std::unique_ptr<Op>>::iterator;
   using const_iterator = std::vector<std::unique_ptr<Op>>::const_iterator;
@@ -253,7 +252,7 @@ struct OpList {
   iterator end() { return list.end(); }
   const_iterator begin() const { return list.begin(); }
   const_iterator end() const { return list.end(); }
-  iterator insert(const_iterator pos, std::unique_ptr<Op> op) { return list.insert(pos, std::move(op)); }
+  iterator insert(const_iterator pos, std::unique_ptr<Op> op);
 
   // semantic accessors (defined after Op, since they access Op's members)
   static std::unique_ptr<Op> make_terminal_nop(AnyV origin);
@@ -346,6 +345,24 @@ struct Op {
 };
 
 // OpList inline methods that need Op to be complete
+inline OpList::OpList(OpList&&) = default;
+inline OpList& OpList::operator=(OpList&&) = default;
+inline OpList::~OpList() = default;
+inline void OpList::clear() {
+  list.clear();
+}
+inline Op& OpList::push_back(std::unique_ptr<Op> op) {
+  list.push_back(std::move(op));
+  return *list.back();
+}
+template<typename... Args>
+inline Op& OpList::push_back(Args&&... args) {
+  list.push_back(std::make_unique<Op>(std::forward<Args>(args)...));
+  return *list.back();
+}
+inline OpList::iterator OpList::insert(const_iterator pos, std::unique_ptr<Op> op) {
+  return list.insert(pos, std::move(op));
+}
 inline std::unique_ptr<Op> OpList::make_terminal_nop(AnyV origin) {
   return std::make_unique<Op>(origin, Op::_Nop);
 }
