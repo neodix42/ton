@@ -1,9 +1,8 @@
-## 2026.03 Update
+## 2026.04-1 Update
 
-1. Stability improvements in Simplex consensus: better handling of votes and certificates, additional rate limits, and tunable noncritical parameters for timing and DoS protection.
-2. Networking improvements: fixes in QUIC, twostep broadcasts, overlays and candidate deduplication/filtering, plus better handling of large traffic bursts.
-3. Better operational visibility: OpenMetrics exporter with QUIC statistics and related node telemetry improvements.
-4. Expanded testing and tooling: stronger consensus tests, QUIC interoperability tests, and improvements in Tontester and tonlib.
-5. Various fixes in node, compression, build and CI infrastructure.
+1. Networking improvements: better traffic handling in overlays, ADNL, RLDP, and QUIC, including broadcast limiting and updated twostep broadcast parameters.
+2. Improved security and robustness across core node components.
+3. Improved handling of peers in public overlays and better QUIC support for custom overlays.
+4. Metrics and operational visibility improvements, including Prometheus exporter and QUIC-related telemetry updates.
 
-Besides the work of the core team, this update also includes contributions from multiple bug-bounty hunters and [https://t.me/contest/447](contest) participants. The full list will be added to changelog and release note after contest result finalization.
+Besides the work of the core team, this update also includes contributions from multiple bug-bounty hunters. The full list will be added to changelog later.

@@ -29,7 +29,6 @@
 #include "impl/ext-message-pool.hpp"
 #include "interfaces/db.h"
 #include "interfaces/validator-manager.h"
-#include "rldp/rldp.h"
 #include "rldp2/rldp.h"
 #include "td/actor/ActorStats.h"
 #include "td/actor/PromiseFuture.h"
@@ -58,6 +57,7 @@ class WaitBlockState;
 class WaitZeroState;
 class WaitShardState;
 class WaitBlockData;
+class AppliedExtMessageCleanupActor;
 
 class BlockHandleLru : public td::ListNode {
  public:
@@ -163,6 +163,7 @@ class ValidatorManagerImpl : public ValidatorManager {
 
   struct WaitBlockHandle {
     std::vector<td::Promise<BlockHandle>> waiting_;
+    bool force_ = false;
   };
   std::map<BlockIdExt, WaitBlockHandle> wait_block_handle_;
 
@@ -206,6 +207,7 @@ class ValidatorManagerImpl : public ValidatorManager {
   td::LRUCache<BlockIdExt, td::Unit> cached_checked_shard_block_descriptions_{/* max_size = */ 1024};
 
   td::actor::ActorOwn<ExtMessagePool> ext_message_pool_;
+  td::actor::ActorOwn<AppliedExtMessageCleanupActor> applied_ext_message_cleanup_actor_;
 
  private:
   // VALIDATOR GROUPS
@@ -357,6 +359,7 @@ class ValidatorManagerImpl : public ValidatorManager {
   void run_ext_query(td::BufferSlice data, td::Promise<td::BufferSlice> promise) override;
 
   void get_block_handle(BlockIdExt id, bool force, td::Promise<BlockHandle> promise) override;
+  void get_block_handle_cont(BlockIdExt id, td::Result<BlockHandle> R);
 
   void set_block_state(BlockHandle handle, td::Ref<ShardState> state, vm::StoreCellHint hint,
                        td::Promise<td::Ref<ShardState>> promise) override;
@@ -418,13 +421,13 @@ class ValidatorManagerImpl : public ValidatorManager {
                                 td::Promise<td::Ref<MessageQueue>> promise) override;
   void wait_block_message_queue_short(BlockIdExt id, td::uint32 priority, td::Timestamp timeout,
                                       td::Promise<td::Ref<MessageQueue>> promise) override;
-  void get_external_messages(ShardIdFull shard,
-                             td::Promise<std::vector<std::pair<td::Ref<ExtMessage>, int>>> promise) override;
+  void get_external_messages(ShardIdFull shard, std::unique_ptr<ExtMsgCallback> callback) override;
   void get_ihr_messages(ShardIdFull shard, td::Promise<std::vector<td::Ref<IhrMessage>>> promise) override;
   void get_shard_blocks_for_collator(BlockIdExt masterchain_block_id,
                                      td::Promise<std::vector<td::Ref<ShardTopBlockDescription>>> promise) override;
   void complete_external_messages(std::vector<ExtMessage::Hash> to_delay,
                                   std::vector<ExtMessage::Hash> to_delete) override;
+  void cleanup_applied_external_messages(BlockHandle handle, td::Ref<BlockData> block) override;
   void complete_ihr_messages(std::vector<IhrMessage::Hash> to_delay, std::vector<IhrMessage::Hash> to_delete) override;
 
   void set_next_block(BlockIdExt prev, BlockIdExt next, td::Promise<td::Unit> promise) override;
@@ -514,8 +517,6 @@ class ValidatorManagerImpl : public ValidatorManager {
                                        td::Promise<td::Unit> promise);
   void set_shard_block_description_ready(td::Ref<ShardTopBlockDescription> desc);
 
-  void register_block_handle(BlockHandle handle);
-
   void finished_wait_state(BlockHandle handle, td::Result<td::Ref<ShardState>> R, bool preliminary);
   void finished_wait_data(BlockHandle handle, td::Result<td::Ref<BlockData>> R);
 
@@ -532,13 +533,12 @@ class ValidatorManagerImpl : public ValidatorManager {
 
   ValidatorManagerImpl(td::Ref<ValidatorManagerOptions> opts, std::string db_root,
                        td::actor::ActorId<keyring::Keyring> keyring, td::actor::ActorId<adnl::Adnl> adnl,
-                       td::actor::ActorId<rldp::Rldp> rldp, td::actor::ActorId<rldp2::Rldp> rldp2,
-                       td::actor::ActorId<quic::QuicSender> quic, td::actor::ActorId<overlay::Overlays> overlays)
+                       td::actor::ActorId<rldp2::Rldp> rldp2, td::actor::ActorId<quic::QuicSender> quic,
+                       td::actor::ActorId<overlay::Overlays> overlays)
       : opts_(std::move(opts))
       , db_root_(db_root)
       , keyring_(keyring)
       , adnl_(adnl)
-      , rldp_(rldp)
       , rldp2_(rldp2)
       , quic_(quic)
       , overlays_(overlays) {
@@ -669,7 +669,6 @@ class ValidatorManagerImpl : public ValidatorManager {
   std::string db_root_;
   td::actor::ActorId<keyring::Keyring> keyring_;
   td::actor::ActorId<adnl::Adnl> adnl_;
-  td::actor::ActorId<rldp::Rldp> rldp_;
   td::actor::ActorId<rldp2::Rldp> rldp2_;
   td::actor::ActorId<quic::QuicSender> quic_;
   td::actor::ActorId<overlay::Overlays> overlays_;
