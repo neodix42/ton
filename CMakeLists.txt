@@ -31,9 +31,47 @@ if (TON_REAL_BINARY_DIR STREQUAL TON_REAL_SOURCE_DIR)
   message(FATAL_ERROR "In-source build failed.")
 endif()
 
-set(CMAKE_CXX_STANDARD 26)
+set(TON_CXX_STANDARD 26 CACHE STRING "Requested C++ standard for TON targets")
+set_property(CACHE TON_CXX_STANDARD PROPERTY STRINGS 23 26)
+
 set(CMAKE_CXX_STANDARD_REQUIRED TRUE)
 set(CMAKE_CXX_EXTENSIONS FALSE)
+
+if (TON_CXX_STANDARD EQUAL 26 AND CMAKE_VERSION VERSION_LESS 3.25)
+  # CMake < 3.25 does not recognize CXX_STANDARD=26.
+  # Use C++23 for CMake feature checks and inject an explicit compiler flag for builds.
+  set(CMAKE_CXX_STANDARD 23)
+
+  include(CheckCXXCompilerFlag)
+
+  set(TON_CXX26_FLAG "")
+  if (MSVC OR CMAKE_CXX_SIMULATE_ID STREQUAL "MSVC")
+    check_cxx_compiler_flag("/std:c++latest" TON_HAS_STD_CXXLATEST)
+    if (TON_HAS_STD_CXXLATEST)
+      set(TON_CXX26_FLAG "/std:c++latest")
+    endif()
+  else()
+    check_cxx_compiler_flag("-std=c++2c" TON_HAS_STD_CXX2C)
+    if (TON_HAS_STD_CXX2C)
+      set(TON_CXX26_FLAG "-std=c++2c")
+    else()
+      check_cxx_compiler_flag("-std=gnu++2c" TON_HAS_STD_GNUXX2C)
+      if (TON_HAS_STD_GNUXX2C)
+        set(TON_CXX26_FLAG "-std=gnu++2c")
+      endif()
+    endif()
+  endif()
+
+  if (TON_CXX26_FLAG)
+    add_compile_options($<$<COMPILE_LANGUAGE:CXX>:${TON_CXX26_FLAG}>)
+    message(STATUS "CMake ${CMAKE_VERSION}: using ${TON_CXX26_FLAG} for C++26 mode")
+  else()
+    message(FATAL_ERROR
+            "TON_CXX_STANDARD=26 requires CMake >= 3.25 or a compiler flag recognized by this toolchain")
+  endif()
+else()
+  set(CMAKE_CXX_STANDARD ${TON_CXX_STANDARD})
+endif()
 
 set(CMAKE_COLOR_DIAGNOSTICS TRUE)
 
