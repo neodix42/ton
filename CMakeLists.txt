@@ -37,9 +37,21 @@ set_property(CACHE TON_CXX_STANDARD PROPERTY STRINGS 23 26)
 set(CMAKE_CXX_STANDARD_REQUIRED TRUE)
 set(CMAKE_CXX_EXTENSIONS FALSE)
 
-if (TON_CXX_STANDARD EQUAL 26 AND CMAKE_VERSION VERSION_LESS 3.25)
-  # CMake < 3.25 does not recognize CXX_STANDARD=26.
-  # Use C++23 for CMake feature checks and inject an explicit compiler flag for builds.
+set(TON_USE_CXX26_FLAG_FALLBACK OFF)
+if (TON_CXX_STANDARD EQUAL 26)
+  if (CMAKE_VERSION VERSION_LESS 3.25)
+    # CMake < 3.25 does not recognize CXX_STANDARD=26.
+    set(TON_USE_CXX26_FLAG_FALLBACK ON)
+  elseif (NOT "cxx_std_26" IN_LIST CMAKE_CXX_COMPILE_FEATURES)
+    # Some toolchains/CMake combinations (notably clang on Windows) accept
+    # CXX_STANDARD=26 syntactically, but don't expose usable CXX26 flags for
+    # try_compile() projects used by third-party configure checks.
+    set(TON_USE_CXX26_FLAG_FALLBACK ON)
+  endif()
+endif()
+
+if (TON_USE_CXX26_FLAG_FALLBACK)
+  # Keep CMake feature checks on a known standard and force C++26 via explicit flag.
   set(CMAKE_CXX_STANDARD 23)
 
   include(CheckCXXCompilerFlag)
@@ -64,10 +76,10 @@ if (TON_CXX_STANDARD EQUAL 26 AND CMAKE_VERSION VERSION_LESS 3.25)
 
   if (TON_CXX26_FLAG)
     add_compile_options($<$<COMPILE_LANGUAGE:CXX>:${TON_CXX26_FLAG}>)
-    message(STATUS "CMake ${CMAKE_VERSION}: using ${TON_CXX26_FLAG} for C++26 mode")
+    message(STATUS "Using explicit C++26 flag fallback: ${TON_CXX26_FLAG}")
   else()
     message(FATAL_ERROR
-            "TON_CXX_STANDARD=26 requires CMake >= 3.25 or a compiler flag recognized by this toolchain")
+            "TON_CXX_STANDARD=26 requires either native CMake/compiler support or an explicit C++26 flag")
   endif()
 else()
   set(CMAKE_CXX_STANDARD ${TON_CXX_STANDARD})
