@@ -26,16 +26,11 @@
 #include <thread>
 #include <variant>
 
-// FIXME: Remove once RocksDB stops triggering this warning.
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wimplicit-int-float-conversion"
+#include "common/AtomicRef.h"
+#include "openssl/digest.hpp"
 #include "rocksdb/compaction_filter.h"
 #include "rocksdb/db.h"
 #include "rocksdb/merge_operator.h"
-#pragma GCC diagnostic pop
-
-#include "common/AtomicRef.h"
-#include "openssl/digest.hpp"
 #include "storage/db.h"
 #include "td/actor/actor.h"
 #include "td/db/MemoryKeyValue.h"

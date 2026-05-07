@@ -45,6 +45,7 @@ class CellBuilder : public td::CntObject {
 
  public:
   CellBuilder();
+  CellBuilder(CellBuilder&& other);
   virtual ~CellBuilder() override;
 
   static Ref<Cell> create_pruned_branch(Ref<Cell> cell, td::uint32 new_level, td::uint32 virt_level = Cell::max_level);

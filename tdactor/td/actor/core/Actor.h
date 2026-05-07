@@ -102,6 +102,24 @@ class Actor {
   ActorInfoPtr actor_info_ptr_;
 };
 
+inline ActorInfo::ActorInfo(std::unique_ptr<Actor> actor, ActorState::Flags state_flags, Slice name,
+                            td::uint32 actor_stat_id)
+    : actor_(std::move(actor)), name_(name.begin(), name.size()), actor_stat_id_(actor_stat_id) {
+  state_.set_flags_unsafe(state_flags);
+  VLOG(actor) << "Create actor [" << name_ << "]";
+}
+
+inline ActorInfo::~ActorInfo() {
+  VLOG(actor) << "Destroy actor [" << name_ << "]";
+  CHECK(!actor_);
+}
+
+inline void ActorInfo::dec_ref() {
+  if (actor_ref_cnt_.fetch_sub(1, std::memory_order_acq_rel) == 1) {
+    actor_.reset();
+  }
+}
+
 }  // namespace core
 }  // namespace actor
 }  // namespace td

@@ -20,6 +20,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include <map>
 #include <set>
 #include <string>
 #include <vector>
@@ -432,6 +433,50 @@ void write_class(tl_outputer &out, const tl_type *t, const std::set<std::string>
   assert(written_constructors == t->simple_constructors);
 }
 
+static void collect_tree_deps(const tl_tree *t, std::set<const tl_type *> &deps) {
+  int type = t->get_type();
+  if (type == NODE_TYPE_ARRAY) {
+    const tl_tree_array *arr = static_cast<const tl_tree_array *>(t);
+    for (std::size_t i = 0; i < arr->args.size(); i++) {
+      collect_tree_deps(arr->args[i].type, deps);
+    }
+  } else if (type == NODE_TYPE_TYPE) {
+    const tl_tree_type *tree_type = static_cast<const tl_tree_type *>(t);
+    deps.insert(tree_type->type);
+    for (std::size_t i = 0; i < tree_type->children.size(); i++) {
+      collect_tree_deps(tree_type->children[i], deps);
+    }
+  }
+}
+
+static std::set<const tl_type *> collect_type_deps(const tl_type *t, const TL_writer &w) {
+  std::set<const tl_type *> deps;
+  for (std::size_t i = 0; i < t->constructors_num; i++) {
+    if (!w.is_combinator_supported(t->constructors[i])) {
+      continue;
+    }
+    for (std::size_t j = 0; j < t->constructors[i]->args.size(); j++) {
+      collect_tree_deps(t->constructors[i]->args[j].type, deps);
+    }
+  }
+  deps.erase(t);  // remove self-references
+  return deps;
+}
+
+static void toposort_visit(const tl_type *t, const std::map<const tl_type *, std::set<const tl_type *>> &dep_graph,
+                           std::set<const tl_type *> &visited, std::vector<const tl_type *> &order) {
+  if (!visited.insert(t).second) {
+    return;
+  }
+  auto it = dep_graph.find(t);
+  if (it != dep_graph.end()) {
+    for (const tl_type *dep : it->second) {
+      toposort_visit(dep, dep_graph, visited, order);
+    }
+  }
+  order.push_back(t);
+}
+
 static void dfs_type(const tl_type *t, std::set<std::string> &found, const TL_writer &w);
 
 static void dfs_tree(const tl_tree *t, std::set<std::string> &found, const TL_writer &w) {
@@ -784,18 +829,42 @@ void write_tl(const tl_config &config, tl_outputer &out, const TL_writer &w) {
     out.append(w.gen_class_end());
   }
 
+  // topologically sort types so dependencies are emitted before dependents
+  std::map<const tl_type *, std::set<const tl_type *>> dep_graph;
+  std::set<const tl_type *> eligible_types;
   for (std::size_t type = 0; type < types_n; type++) {
     tl_type *t = config.get_type_by_num(type);
-    if (t->constructors_num == 0 || w.is_built_in_simple_type(t->name) ||
-        w.is_built_in_complex_type(t->name)) {  // built-in dummy or complex types
+    if (t->constructors_num == 0 || w.is_built_in_simple_type(t->name) || w.is_built_in_complex_type(t->name)) {
       continue;
     }
-
     if (t->flags & FLAG_COMPLEX) {
       std::fprintf(stderr, "Can't generate class %s\n", t->name.c_str());
       continue;
     }
+    eligible_types.insert(t);
+  }
+  for (const tl_type *t : eligible_types) {
+    std::set<const tl_type *> deps = collect_type_deps(t, w);
+    std::set<const tl_type *> filtered_deps;
+    for (const tl_type *dep : deps) {
+      if (eligible_types.count(dep)) {
+        filtered_deps.insert(dep);
+      }
+    }
+    dep_graph[t] = std::move(filtered_deps);
+  }
 
+  std::set<const tl_type *> visited;
+  std::vector<const tl_type *> sorted_types;
+  // visit in declaration order to keep stable ordering for types without dependencies
+  for (std::size_t type = 0; type < types_n; type++) {
+    tl_type *t = config.get_type_by_num(type);
+    if (eligible_types.count(t)) {
+      toposort_visit(t, dep_graph, visited, sorted_types);
+    }
+  }
+
+  for (const tl_type *t : sorted_types) {
     write_class(out, t, request_types, result_types, w);
   }
 

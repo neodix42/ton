@@ -106,7 +106,7 @@ class VmState final : public VmStateInterface {
   size_t chksgn_counter = 0;
   size_t get_extra_balance_counter = 0;
   long long free_gas_consumed = 0;
-  std::unique_ptr<ParentVmState> parent = nullptr;
+  std::unique_ptr<ParentVmState> parent{};
 
  public:
   enum {
@@ -181,6 +181,7 @@ class VmState final : public VmStateInterface {
   VmState(VmState&&) = default;
   VmState& operator=(const VmState&) = delete;
   VmState& operator=(VmState&&) = default;
+  ~VmState();
   bool set_gas_limits(long long _max, long long _limit, long long _credit = 0);
   bool final_gas_ok() const {
     return gas.final_ok();

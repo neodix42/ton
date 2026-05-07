@@ -55,6 +55,8 @@ VmState::VmState(Ref<CellSlice> _code, int global_version, Ref<Stack> _stack, co
   init_cregs(flags & 1, flags & 2);
 }
 
+VmState::~VmState() = default;
+
 void VmState::init_cregs(bool same_c3, bool push_0) {
   cr.set_c0(quit0);
   cr.set_c1(quit1);
