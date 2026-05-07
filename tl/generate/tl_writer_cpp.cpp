@@ -520,7 +520,7 @@ std::string TD_TL_writer_cpp::gen_get_id(const std::string &class_name, std::int
   if (is_proxy) {
     return "";
   }
-  return "\nconst std::int32_t " + class_name + "::ID;\n";
+  return "\n" + class_name + "::~" + class_name + "() = default;\n\nconst std::int32_t " + class_name + "::ID;\n";
 }
 
 std::string TD_TL_writer_cpp::gen_function_result_type(const tl::tl_tree *result) const {

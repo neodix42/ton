@@ -192,7 +192,18 @@ if (TON_USE_ROCKSDB)
     set(WITH_ASAN ${TON_USE_ASAN} CACHE BOOL "")
     set(WITH_TSAN ${TON_USE_TSAN} CACHE BOOL "")
     set(WITH_UBSAN ${TON_USE_UBSAN} CACHE BOOL "")
+    # RocksDB's configure checks (CheckCXXSourceCompiles) may fail when the parent
+    # project requests C++26 on toolchains/CMake combinations that don't fully support it.
+    # Force C++20 for RocksDB's entire subdirectory configure/build scope.
+    set(CMAKE_CXX_STANDARD 20)
+    set(CMAKE_CXX_STANDARD_REQUIRED ON)
+    set(CMAKE_CXX_EXTENSIONS OFF)
     add_subdirectory(third-party/rocksdb EXCLUDE_FROM_ALL)
+    # Keep RocksDB on its own supported standard; avoid pulling project-level C++2c flags into xxhash on
+    # toolchains where C++23 library pieces (for example std::unreachable) are incomplete.
+    if (TARGET rocksdb)
+      set_target_properties(rocksdb PROPERTIES CXX_STANDARD 20 CXX_STANDARD_REQUIRED ON CXX_EXTENSIONS OFF)
+    endif()
     # Broken CMake in rocksdb alters properties it has no business changing.
     set_property(GLOBAL PROPERTY RULE_LAUNCH_COMPILE)
     set_property(GLOBAL PROPERTY RULE_LAUNCH_LINK)

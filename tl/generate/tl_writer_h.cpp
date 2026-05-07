@@ -216,9 +216,17 @@ std::string TD_TL_writer_h::gen_forward_class_declaration(const std::string &cla
 
 std::string TD_TL_writer_h::gen_class_begin(const std::string &class_name, const std::string &base_class_name,
                                             bool is_proxy) const {
-  return "class " + class_name + (!is_proxy ? " final " : "") + ": public " + base_class_name +
-         " {\n"
-         " public:\n";
+  std::string res = "class " + class_name + (!is_proxy ? " final " : "") + ": public " + base_class_name +
+                    " {\n"
+                    " public:\n";
+  if (!is_proxy) {
+    // Keep destruction out-of-line to support members holding object_ptr<forward_declared_type>.
+    res += "  ~" + class_name + "() override;\n\n";
+    // A user-declared destructor suppresses implicit move constructor generation.
+    // Explicitly default it back to keep generated TL objects movable.
+    res += "  " + class_name + "(" + class_name + "&&) = default;\n\n";
+  }
+  return res;
 }
 
 std::string TD_TL_writer_h::gen_class_end() const {
