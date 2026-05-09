@@ -52,6 +52,12 @@ jobs:
         chmod +x build-android-tonlib.sh
         ./build-android-tonlib.sh -a
 
+    - name: Enable KVM for Android emulator
+      run: |
+        echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+        sudo udevadm control --reload-rules
+        sudo udevadm trigger --name-match=kvm
+
     - name: Run Android smoke tests on emulator (API 30 / x86_64)
       uses: ReactiveCircus/android-emulator-runner@v2
       with:
@@ -59,8 +65,10 @@ jobs:
         arch: x86_64
         target: google_apis
         profile: pixel_6
-        emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
-        disable-animations: true
+        emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none -no-snapshot -no-snapshot-save
+        emulator-boot-timeout: 900
+        disable-animations: false
+        disable-linux-hw-accel: false
         script: |
           cd "${GITHUB_WORKSPACE}/example/android"
           export ANDROID_NDK_ROOT="${GITHUB_WORKSPACE}/android-ndk-r27d"
