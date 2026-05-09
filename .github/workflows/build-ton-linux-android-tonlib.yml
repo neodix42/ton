@@ -70,9 +70,9 @@ jobs:
         disable-animations: false
         disable-linux-hw-accel: false
         script: |
-          ANDROID_NDK_ROOT="${GITHUB_WORKSPACE}/android-ndk-r27d" "${GITHUB_WORKSPACE}/example/android/smoke/build-smoke.sh" x86_64
-          "${GITHUB_WORKSPACE}/example/android/smoke/run-smoke-adb.sh" x86_64
-          "${GITHUB_WORKSPACE}/example/android/smoke/run-java-smoke-adb.sh" x86_64
+          ANDROID_NDK_ROOT="${GITHUB_WORKSPACE}/android-ndk-r27d" bash "${GITHUB_WORKSPACE}/example/android/smoke/build-smoke.sh" x86_64
+          bash "${GITHUB_WORKSPACE}/example/android/smoke/run-smoke-adb.sh" x86_64
+          bash "${GITHUB_WORKSPACE}/example/android/smoke/run-java-smoke-adb.sh" x86_64
 
     - name: Upload artifacts
       uses: actions/upload-artifact@master
