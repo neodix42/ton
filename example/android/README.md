@@ -38,7 +38,7 @@ cd example/android
 ./smoke/run-java-smoke-adb.sh arm64-v8a
 ```
 
-This runs `drinkless.org.ton.TonSmokeLoadTest` only.
+This runs `drinkless.org.tonlib.JavaSmokeLoadTest` only.
 
 Note: `adb` is not part of the NDK. It is provided by Android SDK Platform-Tools.
 # Generation of Tonlib libraries for iOS in Xcode

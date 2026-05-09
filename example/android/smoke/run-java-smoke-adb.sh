@@ -65,12 +65,17 @@ if [ ! -f "${LIB_DIR}/libnative-lib.so" ] || [ ! -f "${LIB_DIR}/libtonlibjson.so
   exit 1
 fi
 
-mkdir -p "${TEST_DIR}/ton/src/main/java"
-cp -r "${ANDROID_DIR}/src/"* "${TEST_DIR}/ton/src/main/java/"
+SMOKE_MODULE_DIR="${TEST_DIR}/smoke"
+if [ ! -d "${SMOKE_MODULE_DIR}" ]; then
+  echo "Missing smoke test module at ${SMOKE_MODULE_DIR}" >&2
+  exit 1
+fi
 
-mkdir -p "${TEST_DIR}/ton/src/cpp/prebuilt"
-rm -rf "${TEST_DIR}/ton/src/cpp/prebuilt/${ABI}"
-cp -r "${LIB_DIR}" "${TEST_DIR}/ton/src/cpp/prebuilt/"
+mkdir -p "${SMOKE_MODULE_DIR}/src/cpp/prebuilt"
+rm -rf "${SMOKE_MODULE_DIR}/src/cpp/prebuilt/${ABI}"
+mkdir -p "${SMOKE_MODULE_DIR}/src/cpp/prebuilt/${ABI}"
+cp "${LIB_DIR}/libnative-lib.so" "${SMOKE_MODULE_DIR}/src/cpp/prebuilt/${ABI}/"
+cp "${LIB_DIR}/libtonlibjson.so" "${SMOKE_MODULE_DIR}/src/cpp/prebuilt/${ABI}/"
 
 export PATH="$(dirname "${ADB_BIN}"):${PATH}"
 if [ -n "${SERIAL}" ]; then
@@ -82,6 +87,6 @@ fi
 
 (
   cd "${TEST_DIR}"
-  ./gradlew :ton:connectedAndroidTest \
-    -Pandroid.testInstrumentationRunnerArguments.class=drinkless.org.ton.TonSmokeLoadTest
+  ./gradlew -c settings-smoke.gradle :smoke:connectedAndroidTest \
+    -Pandroid.testInstrumentationRunnerArguments.class=drinkless.org.tonlib.JavaSmokeLoadTest
 )
