@@ -41,7 +41,7 @@ jobs:
       id: cache-android-ndk
       uses: actions/cache@v4
       with:
-        path: android-ndk-r25b
+        path: android-ndk-r27d
         key: ${{ runner.os }}-${{ runner.arch }}-ubuntu-22.04-cache-android-ndk-${{ hashFiles('**/assembly/android/build-android-tonlib.sh') }}
 
     - name: Build TON
@@ -51,6 +51,22 @@ jobs:
         cp assembly/android/build-android-tonlib.sh .
         chmod +x build-android-tonlib.sh
         ./build-android-tonlib.sh -a
+
+    - name: Run Android smoke tests on emulator (API 30 / x86_64)
+      uses: ReactiveCircus/android-emulator-runner@v2
+      with:
+        api-level: 30
+        arch: x86_64
+        target: google_apis
+        profile: pixel_6
+        emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+        disable-animations: true
+        script: |
+          cd "${GITHUB_WORKSPACE}/example/android"
+          export ANDROID_NDK_ROOT="${GITHUB_WORKSPACE}/android-ndk-r27d"
+          ./smoke/build-smoke.sh x86_64
+          ./smoke/run-smoke-adb.sh x86_64
+          ./smoke/run-java-smoke-adb.sh x86_64
 
     - name: Upload artifacts
       uses: actions/upload-artifact@master

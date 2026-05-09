@@ -32,6 +32,20 @@ fi
 
 ARCH=$ABI
 
+STRIP_BIN="${ANDROID_NDK_ROOT}/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip"
+if [ ! -x "${STRIP_BIN}" ]; then
+  STRIP_BIN="strip"
+fi
+
+function strip_shared_object() {
+  local so_path="$1"
+  if [ ! -f "${so_path}" ]; then
+    echo "[build.sh] Cannot strip missing file ${so_path}" >&2
+    return 1
+  fi
+  "${STRIP_BIN}" --strip-debug --strip-unneeded "${so_path}"
+}
+
 function is_system_dependency() {
   case "$1" in
     libc.so|libdl.so|liblog.so|libm.so|libandroid.so|libz.so|libjnigraphics.so|libOpenSLES.so|libEGL.so|libGLESv1_CM.so|libGLESv2.so|libGLESv3.so|libvulkan.so|libmediandk.so)
@@ -114,6 +128,9 @@ function copy_runtime_dependencies() {
 
       processed_deps="${processed_deps}${dep_name} "
       cp -L "${dep_path}" "${output_dir}/${dep_name}"
+      if [[ "${dep_name}" == *.so ]]; then
+        strip_shared_object "${output_dir}/${dep_name}" || return 1
+      fi
       queue+=("${dep_path}")
     done < <("${readelf_bin}" -d "${target_file}" | awk -F'[][]' '/NEEDED/ {print $2}')
   done
@@ -148,7 +165,7 @@ echo "[build.sh] build native-lib (ARCH=${ARCH})"
 ninja native-lib || exit 1
 popd
 
-$ANDROID_NDK_ROOT/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip build-$ARCH/libnative-lib.so
+strip_shared_object "build-$ARCH/libnative-lib.so" || exit 1
 
 mkdir -p libs/$ARCH/
 cp build-$ARCH/libnative-lib.so* libs/$ARCH/
