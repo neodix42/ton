@@ -32,6 +32,93 @@ fi
 
 ARCH=$ABI
 
+function is_system_dependency() {
+  case "$1" in
+    libc.so|libdl.so|liblog.so|libm.so|libandroid.so|libz.so|libjnigraphics.so|libOpenSLES.so|libEGL.so|libGLESv1_CM.so|libGLESv2.so|libGLESv3.so|libvulkan.so|libmediandk.so)
+      return 0
+      ;;
+  esac
+  return 1
+}
+
+function find_dependency_file() {
+  local dep_name="$1"
+  local build_dir="$2"
+
+  local dep_path
+  dep_path=$(find "${build_dir}" -type f -name "${dep_name}" -print -quit)
+  if [ -n "${dep_path}" ]; then
+    echo "${dep_path}"
+    return 0
+  fi
+
+  # Fallback for versioned outputs when linker expects an unversioned SONAME.
+  if [ "${dep_name}" = "libtonlibjson.so" ]; then
+    dep_path=$(find "${build_dir}" -type f -name "libtonlibjson.so*" -print -quit)
+    if [ -n "${dep_path}" ]; then
+      echo "${dep_path}"
+      return 0
+    fi
+  fi
+
+  if [ "${dep_name}" = "libc++_shared.so" ]; then
+    local triple
+    case "${ABI}" in
+      armeabi-v7a) triple="arm-linux-androideabi" ;;
+      arm64-v8a) triple="aarch64-linux-android" ;;
+      x86) triple="i686-linux-android" ;;
+      x86_64) triple="x86_64-linux-android" ;;
+      *) triple="" ;;
+    esac
+    if [ -n "${triple}" ]; then
+      dep_path="${ANDROID_NDK_ROOT}/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/${triple}/libc++_shared.so"
+      if [ -f "${dep_path}" ]; then
+        echo "${dep_path}"
+        return 0
+      fi
+    fi
+  fi
+
+  return 1
+}
+
+function copy_runtime_dependencies() {
+  local build_dir="$1"
+  local output_dir="$2"
+
+  local readelf_bin="${ANDROID_NDK_ROOT}/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-readelf"
+  if [ ! -x "${readelf_bin}" ]; then
+    readelf_bin="readelf"
+  fi
+
+  local processed_deps=" "
+  local queue=("${build_dir}/libnative-lib.so")
+
+  while [ ${#queue[@]} -gt 0 ]; do
+    local target_file="${queue[0]}"
+    queue=("${queue[@]:1}")
+
+    local dep_name
+    while IFS= read -r dep_name; do
+      [ -z "${dep_name}" ] && continue
+      is_system_dependency "${dep_name}" && continue
+      case "${processed_deps}" in
+        *" ${dep_name} "*) continue ;;
+      esac
+
+      local dep_path
+      dep_path=$(find_dependency_file "${dep_name}" "${build_dir}") || {
+        echo "[build.sh] Runtime dependency ${dep_name} not found for ${ABI}" >&2
+        return 1
+      }
+
+      processed_deps="${processed_deps}${dep_name} "
+      cp -L "${dep_path}" "${output_dir}/${dep_name}"
+      queue+=("${dep_path}")
+    done < <("${readelf_bin}" -d "${target_file}" | awk -F'[][]' '/NEEDED/ {print $2}')
+  done
+}
+
 ANDROID_PLATFORM_LEVEL="android-32"
 if [ "${ABI}" == "x86" ] || [ "${ABI}" == "x86_64" ]; then
   ANDROID_PLATFORM_LEVEL="android-30"
@@ -65,3 +152,4 @@ $ANDROID_NDK_ROOT/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip build-$AR
 
 mkdir -p libs/$ARCH/
 cp build-$ARCH/libnative-lib.so* libs/$ARCH/
+copy_runtime_dependencies "build-$ARCH" "libs/$ARCH/" || exit 1
