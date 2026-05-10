@@ -13,6 +13,7 @@ public class JavaSmokeLoadTest {
         ClientJsonNative nativeApi = new ClientJsonNative();
         long client = nativeApi.create();
         assertTrue(client != 0L);
+        nativeApi.set_verbosity_level(0);
         nativeApi.destroy(client);
     }
 }

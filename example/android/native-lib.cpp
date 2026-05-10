@@ -42,6 +42,10 @@ extern "C" JNIEXPORT jstring JNICALL Java_drinkless_org_tonlib_MainActivity_stri
 extern "C" JNIEXPORT jlong JNICALL Java_drinkless_org_tonlib_ClientJsonNative_create(JNIEnv *env, jobject /* this */) {
   return reinterpret_cast<jlong>(tonlib_client_json_create());
 }
+extern "C" JNIEXPORT void JNICALL Java_drinkless_org_tonlib_ClientJsonNative_set_1verbosity_1level(
+    JNIEnv *env, jobject /* this */, jint verbosity_level) {
+  tonlib_client_set_verbosity_level(static_cast<int>(verbosity_level));
+}
 extern "C" JNIEXPORT void JNICALL Java_drinkless_org_tonlib_ClientJsonNative_send(JNIEnv *env, jobject /* this */,
                                                                                   jlong client, jstring j_query) {
   auto query = td::jni::from_jstring(env, j_query);
@@ -137,6 +141,14 @@ static constexpr jint JAVA_VERSION = JNI_VERSION_1_6;
 static JavaVM *java_vm;
 static jclass log_class;
 
+static jclass find_optional_jclass(JNIEnv *env, const char *name) {
+  auto clazz = env->FindClass(name);
+  if (clazz == nullptr && env->ExceptionCheck()) {
+    env->ExceptionClear();
+  }
+  return clazz;
+}
+
 static void on_fatal_error(const char *error_message) {
   auto env = td::jni::get_jni_env(java_vm, JAVA_VERSION);
   jmethodID on_fatal_error_method = env->GetStaticMethodID(log_class, "onFatalError", "(Ljava/lang/String;)V");
@@ -157,15 +169,32 @@ static jint register_native(JavaVM *vm) {
 
   java_vm = vm;
 
+  auto client_class = find_optional_jclass(env, PACKAGE_NAME "/Client");
+  auto object_class = find_optional_jclass(env, PACKAGE_NAME "/TonApi$Object");
+  auto function_class = find_optional_jclass(env, PACKAGE_NAME "/TonApi$Function");
+
+  // Some consumers (for example smoke tests) only use ClientJsonNative and don't
+  // package the higher-level Java TonApi classes. In that case JNI_OnLoad must
+  // not fail, because the exported ClientJsonNative JNI symbols are sufficient.
+  if (client_class == nullptr || object_class == nullptr || function_class == nullptr) {
+    if (client_class != nullptr) {
+      env->DeleteLocalRef(client_class);
+    }
+    if (object_class != nullptr) {
+      env->DeleteLocalRef(object_class);
+    }
+    if (function_class != nullptr) {
+      env->DeleteLocalRef(function_class);
+    }
+    return JAVA_VERSION;
+  }
+
   auto register_method = [env](jclass clazz, std::string name, std::string signature, auto function_ptr) {
     td::jni::register_native_method(env, clazz, std::move(name), std::move(signature),
                                     reinterpret_cast<void *>(function_ptr));
   };
 
-  auto client_class = td::jni::get_jclass(env, PACKAGE_NAME "/Client");
   //log_class = td::jni::get_jclass(env, PACKAGE_NAME "/Log");
-  auto object_class = td::jni::get_jclass(env, PACKAGE_NAME "/TonApi$Object");
-  auto function_class = td::jni::get_jclass(env, PACKAGE_NAME "/TonApi$Function");
 
 #define TD_OBJECT "L" PACKAGE_NAME "/TonApi$Object;"
 #define TD_FUNCTION "L" PACKAGE_NAME "/TonApi$Function;"
@@ -185,6 +214,10 @@ static jint register_native(JavaVM *vm) {
   tonlib_api::Function::init_jni_vars(env, PACKAGE_NAME);
   // FIXME
   //td::Log::set_fatal_error_callback(on_fatal_error);
+
+  env->DeleteLocalRef(client_class);
+  env->DeleteLocalRef(object_class);
+  env->DeleteLocalRef(function_class);
 
   return JAVA_VERSION;
 }
