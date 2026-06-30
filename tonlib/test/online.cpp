@@ -30,9 +30,7 @@
 #include "auto/tl/tonlib_api_json.h"
 #include "block/block-auto.h"
 #include "block/block.h"
-#include "smc-envelope/GenericAccount.h"
 #include "smc-envelope/ManualDns.h"
-#include "smc-envelope/MultisigWallet.h"
 #include "td/utils/Container.h"
 #include "td/utils/MpscPollableQueue.h"
 #include "td/utils/OptionParser.h"
@@ -142,22 +140,13 @@ std::string wallet_address(Client& client, const Key& key) {
       ->account_address_;
 }
 
-std::string highload_wallet_address(Client& client, const Key& key) {
-  return sync_send(client, make_object<tonlib_api::getAccountAddress>(
-                               make_object<tonlib_api::wallet_highload_v2_initialAccountState>(key.public_key,
-                                                                                               default_wallet_id),
-                               1 /*TODO: guess revision!*/, 0))
-      .move_as_ok()
-      ->account_address_;
-}
-
 Wallet import_wallet_from_pkey(Client& client, std::string pkey, std::string password) {
   auto key = sync_send(client, make_object<tonlib_api::importPemKey>(
                                    td::SecureString("local"), td::SecureString(password),
                                    make_object<tonlib_api::exportedPemKey>(td::SecureString(pkey))))
                  .move_as_ok();
   Wallet wallet{"", {key->public_key_, std::move(key->secret_)}};
-  wallet.address = highload_wallet_address(client, wallet.key);
+  wallet.address = wallet_address(client, wallet.key);
   return wallet;
 }
 
@@ -538,55 +527,6 @@ void test_back_and_forth_transfer(Client& client, const Wallet& giver_wallet, bo
   }
 }
 
-void test_multisig(Client& client, const Wallet& giver_wallet) {
-  LOG(ERROR) << "TEST: multisig";
-
-  int n = 16;
-  int k = 10;
-  td::uint32 wallet_id = 7;
-  std::vector<td::Ed25519::PrivateKey> private_keys;
-  for (int i = 0; i < n; i++) {
-    private_keys.push_back(td::Ed25519::generate_private_key().move_as_ok());
-  }
-
-  auto ms = ton::MultisigWallet::create();
-  auto init_data = ms->create_init_data(
-      wallet_id,
-      td::transform(private_keys, [](const auto& pk) { return pk.get_public_key().move_as_ok().as_octet_string(); }),
-      k);
-  ms = ton::MultisigWallet::create(init_data);
-  auto raw_address = ms->get_address(ton::basechainId);
-  auto address = raw_address.rserialize();
-  transfer_grams(client, giver_wallet, address, 1 * Gramm).ensure();
-  auto init_state = ms->get_init_state();
-
-  for (int i = 0; i < 2; i++) {
-    // Just transfer all (some) money back in one query
-    vm::CellBuilder icb;
-    ton::GenericAccount::store_int_message(icb, block::StdAddress::parse(giver_wallet.address).move_as_ok(), 1, {});
-    icb.store_bytes("\0\0\0\0", 4);
-    vm::CellString::store(icb, "Greatings from multisig", 35 * 8).ensure();
-    ton::MultisigWallet::QueryBuilder qb(wallet_id, -1 - i, icb.finalize());
-    for (int i = 0; i < k - 1; i++) {
-      qb.sign(i, private_keys[i]);
-    }
-
-    auto query_id =
-        create_raw_query(client, address,
-                         i == 0 ? vm::std_boc_serialize(ms->get_state().code).move_as_ok().as_slice().str() : "",
-                         i == 0 ? vm::std_boc_serialize(ms->get_state().data).move_as_ok().as_slice().str() : "",
-                         vm::std_boc_serialize(qb.create(k - 1, private_keys[k - 1])).move_as_ok().as_slice().str())
-            .move_as_ok();
-    auto fees = query_estimate_fees(client, query_id);
-
-    LOG(INFO) << "Expected src fees: " << fees.first;
-    LOG(INFO) << "Expected dst fees: " << fees.second;
-    auto a_state = get_account_state(client, address);
-    query_send(client, query_id);
-    auto new_a_state = wait_state_change(client, a_state, a_state.sync_utime + 30).move_as_ok();
-  }
-}
-
 void dns_resolve(Client& client, const Wallet& dns, std::string name) {
   using namespace ton::tonlib_api;
   auto address = dns.get_address();
@@ -840,7 +780,6 @@ int main(int argc, char* argv[]) {
   test_dns(client, giver_wallet);
   test_back_and_forth_transfer(client, giver_wallet, false);
   test_back_and_forth_transfer(client, giver_wallet, true);
-  test_multisig(client, giver_wallet);
 
   return 0;
 }

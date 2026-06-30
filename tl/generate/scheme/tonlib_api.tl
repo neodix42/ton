@@ -64,8 +64,6 @@ pchan.config alice_public_key:string alice_address:accountAddress bob_public_key
 raw.initialAccountState code:bytes data:bytes = InitialAccountState;
 wallet.v3.initialAccountState public_key:string wallet_id:int64 = InitialAccountState;
 wallet.v4.initialAccountState public_key:string wallet_id:int64 = InitialAccountState;
-wallet.highload.v1.initialAccountState public_key:string wallet_id:int64 = InitialAccountState;
-wallet.highload.v2.initialAccountState public_key:string wallet_id:int64 = InitialAccountState;
 
 rwallet.limit seconds:int32 value:int64 = rwallet.Limit;
 rwallet.config start_at:int53 limits:vector<rwallet.limit> = rwallet.Config;
@@ -77,8 +75,6 @@ pchan.initialAccountState config:pchan.config = InitialAccountState;
 raw.accountState code:bytes data:bytes frozen_hash:bytes = AccountState;
 wallet.v3.accountState wallet_id:int64 seqno:int32 = AccountState;
 wallet.v4.accountState wallet_id:int64 seqno:int32 = AccountState;
-wallet.highload.v1.accountState wallet_id:int64 seqno:int32 = AccountState;
-wallet.highload.v2.accountState wallet_id:int64 = AccountState;
 dns.accountState wallet_id:int64 = AccountState;
 rwallet.accountState wallet_id:int64 seqno:int32 unlocked_balance:int64 config:rwallet.config = AccountState;
 
@@ -158,7 +154,6 @@ actionMsg messages:vector<msg.message> allow_send_to_uninited:Bool = Action;
 actionDns actions:vector<dns.Action> = Action;
 actionPchan action:pchan.Action = Action;
 actionRwallet action:rwallet.actionInit = Action;
-//actionMultisig actions:vector<multisig.order> = Action;
 
 fees in_fwd_fee:int53 storage_fee:int53 gas_fee:int53 fwd_fee:int53 = Fees;
 query.fees source_fees:fees destination_fees:vector<fees> = query.Fees;

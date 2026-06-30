@@ -1617,12 +1617,6 @@ class TonlibCli : public td::actor::Actor {
 
   template <class F>
   auto with_account_state(int version, std::string public_key, td::uint32 wallet_id, F&& f) {
-    if (version == 4) {
-      return f(make_object<tonlib_api::wallet_highload_v1_initialAccountState>(public_key, wallet_id));
-    }
-    if (version == 5) {
-      return f(make_object<tonlib_api::wallet_highload_v2_initialAccountState>(public_key, wallet_id));
-    }
     if (version == 6) {
       return f(make_object<tonlib_api::dns_initialAccountState>(public_key, wallet_id));
     }

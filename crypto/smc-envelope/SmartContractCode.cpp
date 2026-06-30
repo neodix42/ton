@@ -29,8 +29,6 @@ namespace {
 // WALLET2_REVISION = 2;
 // WALLET3_REVISION = 2;
 // WALLET4_REVISION = 2;
-// HIGHLOAD_WALLET_REVISION = 2;
-// HIGHLOAD_WALLET2_REVISION = 2;
 // DNS_REVISION = 1;
 const auto& get_map() {
   static auto map = [] {
@@ -39,31 +37,10 @@ const auto& get_map() {
       map[name] = vm::std_boc_deserialize(td::base64_decode(code_str).move_as_ok()).move_as_ok();
     };
 #include "smartcont/auto/dns-manual-code.cpp"
-#include "smartcont/auto/highload-wallet-code.cpp"
-#include "smartcont/auto/highload-wallet-v2-code.cpp"
-#include "smartcont/auto/multisig-code.cpp"
 #include "smartcont/auto/payment-channel-code.cpp"
 #include "smartcont/auto/restricted-wallet3-code.cpp"
 #include "smartcont/auto/wallet-code.cpp"
 
-    with_tvm_code("highload-wallet-r1",
-                  "te6ccgEBBgEAhgABFP8A9KQT9KDyyAsBAgEgAgMCAUgEBQC88oMI1xgg0x/TH9Mf+CMTu/Jj7UTQ0x/TH9P/"
-                  "0VEyuvKhUUS68qIE+QFUEFX5EPKj9ATR+AB/jhghgBD0eG+hb6EgmALTB9QwAfsAkTLiAbPmWwGkyMsfyx/L/"
-                  "8ntVAAE0DAAEaCZL9qJoa4WPw==");
-    with_tvm_code("highload-wallet-r2",
-                  "te6ccgEBCAEAlwABFP8A9KQT9LzyyAsBAgEgAgMCAUgEBQC48oMI1xgg0x/TH9Mf+CMTu/Jj7UTQ0x/TH9P/"
-                  "0VEyuvKhUUS68qIE+QFUEFX5EPKj9ATR+AB/jhYhgBD0eG+lIJgC0wfUMAH7AJEy4gGz5lsBpMjLH8sfy//"
-                  "J7VQABNAwAgFIBgcAF7s5ztRNDTPzHXC/+AARuMl+1E0NcLH4");
-    with_tvm_code("highload-wallet-v2-r1",
-                  "te6ccgEBBwEA1gABFP8A9KQT9KDyyAsBAgEgAgMCAUgEBQHu8oMI1xgg0x/TP/gjqh9TILnyY+1E0NMf0z/T//"
-                  "QE0VNggED0Dm+hMfJgUXO68qIH+QFUEIf5EPKjAvQE0fgAf44YIYAQ9HhvoW+"
-                  "hIJgC0wfUMAH7AJEy4gGz5luDJaHIQDSAQPRDiuYxyBLLHxPLP8v/9ADJ7VQGAATQMABBoZfl2omhpj5jpn+n/"
-                  "mPoCaKkQQCB6BzfQmMktv8ld0fFADgggED0lm+hb6EyURCUMFMDud4gkzM2AZIyMOKz");
-    with_tvm_code("highload-wallet-v2-r2",
-                  "te6ccgEBCQEA5QABFP8A9KQT9LzyyAsBAgEgAgMCAUgEBQHq8oMI1xgg0x/TP/gjqh9TILnyY+1E0NMf0z/T//"
-                  "QE0VNggED0Dm+hMfJgUXO68qIH+QFUEIf5EPKjAvQE0fgAf44WIYAQ9HhvpSCYAtMH1DAB+wCRMuIBs+"
-                  "ZbgyWhyEA0gED0Q4rmMcgSyx8Tyz/L//QAye1UCAAE0DACASAGBwAXvZznaiaGmvmOuF/8AEG+X5dqJoaY+Y6Z/p/"
-                  "5j6AmipEEAgegc30JjJLb/JXdHxQANCCAQPSWb6UyURCUMFMDud4gkzM2AZIyMOKz");
     with_tvm_code("wallet3-r1",
                   "te6ccgEBAQEAYgAAwP8AIN0gggFMl7qXMO1E0NcLH+Ck8mCDCNcYINMf0x/TH/gjE7vyY+1E0NMf0x/T/"
                   "9FRMrryoVFEuvKiBPkBVBBV+RDyo/gAkyDXSpbTB9QC+wDo0QGkyMsfyx/L/8ntVA==");
@@ -128,18 +105,6 @@ td::Span<int> SmartContractCode::get_revisions(Type type) {
       static int res[] = {1, 2};
       return res;
     }
-    case Type::HighloadWalletV1: {
-      static int res[] = {-1, 1, 2};
-      return res;
-    }
-    case Type::HighloadWalletV2: {
-      static int res[] = {-1, 1, 2};
-      return res;
-    }
-    case Type::Multisig: {
-      static int res[] = {-1};
-      return res;
-    }
     case Type::ManualDns: {
       static int res[] = {-1, 1};
       return res;
@@ -192,12 +157,6 @@ td::Ref<vm::Cell> SmartContractCode::get_code(Type type, int ext_revision) {
     switch (type) {
       case Type::WalletV3:
         return "wallet3";
-      case Type::HighloadWalletV1:
-        return "highload-wallet";
-      case Type::HighloadWalletV2:
-        return "highload-wallet-v2";
-      case Type::Multisig:
-        return "multisig";
       case Type::ManualDns:
         return "dns-manual";
       case Type::PaymentChannel:
