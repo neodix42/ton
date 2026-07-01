@@ -61,6 +61,7 @@ jobs:
 
     - name: Restore cache TON
       id: cache-ton
+      if: ${{ github.ref_name == 'master' || github.ref_name == 'testnet' }}
       uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
       with:
         path: ~/.ccache
@@ -82,14 +83,14 @@ jobs:
         ccache -z
 
     - name: Save cache TON
-      if: ${{ success() }}
+      if: ${{ (github.ref_name == 'master' || github.ref_name == 'testnet') && success() }}
       uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
       with:
         path: ~/.ccache
         key: ${{ steps.cache-ton.outputs.cache-primary-key }}
 
     - name: Delete restored cache TON
-      if: ${{ success() && steps.cache-ton.outputs.cache-matched-key != '' && steps.cache-ton.outputs.cache-matched-key != steps.cache-ton.outputs.cache-primary-key }}
+      if: ${{ (github.ref_name == 'master' || github.ref_name == 'testnet') && success() && steps.cache-ton.outputs.cache-matched-key != '' && steps.cache-ton.outputs.cache-matched-key != steps.cache-ton.outputs.cache-primary-key }}
       env:
         GH_TOKEN: ${{ github.token }}
         CACHE_KEY: ${{ steps.cache-ton.outputs.cache-matched-key }}

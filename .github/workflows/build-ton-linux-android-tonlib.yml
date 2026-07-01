@@ -39,6 +39,7 @@ jobs:
 
     - name: Cache Android NDK
       id: cache-android-ndk
+      if: ${{ github.ref_name == 'master' || github.ref_name == 'testnet' }}
       uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
       with:
         path: android-ndk-r25b
