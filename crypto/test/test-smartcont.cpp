@@ -150,34 +150,6 @@ TEST(Tonlib, WalletV3) {
   CHECK(vm::std_boc_deserialize(wallet_query).move_as_ok()->get_hash() == gift_message->get_hash());
 }
 
-TEST(Tonlib, RestrictedWallet3) {
-  auto init_priv_key = td::Ed25519::generate_private_key().move_as_ok();
-  auto init_pub_key = init_priv_key.get_public_key().move_as_ok();
-  auto priv_key = td::Ed25519::generate_private_key().move_as_ok();
-  auto pub_key = priv_key.get_public_key().move_as_ok();
-
-  ton::RestrictedWallet::InitData init_data;
-  init_data.init_key = init_pub_key.as_octet_string();
-  init_data.main_key = pub_key.as_octet_string();
-  init_data.wallet_id = 123;
-  auto wallet = ton::RestrictedWallet::create(init_data, 1);
-
-  auto address = wallet->get_address();
-
-  td::uint64 x = 100 * 1000000000ull;
-  ton::RestrictedWallet::Config config;
-  config.start_at = 1;
-  config.limits = {{-32768, x}, {92, x * 3 / 4}, {183, x * 1 / 2}, {366, x * 1 / 4}, {548, 0}};
-  CHECK(wallet.write().send_external_message(wallet->get_init_message(init_priv_key, 10, config).move_as_ok()).success);
-  CHECK(wallet->get_seqno().move_as_ok() == 1);
-
-  ton::WalletInterface::Gift gift;
-  gift.destination = address;
-  gift.message = "hello";
-  CHECK(wallet.write().send_external_message(wallet->make_a_gift_message(priv_key, 10, {gift}).move_as_ok()).success);
-  CHECK(wallet->get_seqno().move_as_ok() == 2);
-}
-
 template <class T>
 void check_wallet_seqno(td::Ref<T> wallet, td::uint32 seqno) {
   ASSERT_EQ(seqno, wallet->get_seqno().ok());
@@ -221,36 +193,6 @@ class InitWallet {
     return res;
   }
 };
-
-template <>
-CreatedWallet InitWallet<ton::RestrictedWallet>::operator()(int revision) const {
-  auto init_priv_key = td::Ed25519::generate_private_key().move_as_ok();
-  auto init_pub_key = init_priv_key.get_public_key().move_as_ok();
-  auto priv_key = td::Ed25519::generate_private_key().move_as_ok();
-  auto pub_key = priv_key.get_public_key().move_as_ok();
-
-  ton::RestrictedWallet::InitData init_data;
-  init_data.init_key = init_pub_key.as_octet_string();
-  init_data.main_key = pub_key.as_octet_string();
-  init_data.wallet_id = 123;
-  auto wallet = ton::RestrictedWallet::create(init_data, 1);
-  check_wallet_state(wallet, 0, 123, init_data.init_key);
-
-  auto address = wallet->get_address();
-
-  td::uint64 x = 100 * 1000000000ull;
-  ton::RestrictedWallet::Config config;
-  config.start_at = 1;
-  config.limits = {{-32768, x}, {92, x * 3 / 4}, {183, x * 1 / 2}, {366, x * 1 / 4}, {548, 0}};
-  CHECK(wallet.write().send_external_message(wallet->get_init_message(init_priv_key, 10, config).move_as_ok()).success);
-  CHECK(wallet->get_seqno().move_as_ok() == 1);
-
-  CreatedWallet res;
-  res.wallet = std::move(wallet);
-  res.address = std::move(address);
-  res.priv_key = std::move(priv_key);
-  return res;
-}
 
 template <class T>
 void do_test_wallet(int revision) {
@@ -299,7 +241,6 @@ void do_test_wallet() {
 TEST(Tonlib, Wallet) {
   do_test_wallet<ton::WalletV3>();
   do_test_wallet<ton::WalletV4>();
-  do_test_wallet<ton::RestrictedWallet>();
 }
 
 class MapDns {

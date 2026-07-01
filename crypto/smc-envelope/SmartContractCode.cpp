@@ -38,7 +38,6 @@ const auto& get_map() {
     };
 #include "smartcont/auto/dns-manual-code.cpp"
 #include "smartcont/auto/payment-channel-code.cpp"
-#include "smartcont/auto/restricted-wallet3-code.cpp"
 #include "smartcont/auto/wallet-code.cpp"
 
     with_tvm_code("wallet3-r1",
@@ -62,14 +61,6 @@ const auto& get_map() {
         "FwCEMQLTAAHAAZPUAdCY0wUBqgLXGAHiINdJwg/"
         "ypiB41yLXCwfyaHBTEddJqTYCmNMHAcAAEqEB5DDIywYBzxbJ0FADACBZ9KhvpSCUAvQEMJIybeICACg0A4AQ9FqZECOECUBE8AEBkjAx4gBmM"
         "SLAFZwy9AQQI4QJUELwAQHgIsAWmDIChAn0czAB4DAyIMAfkzD0BODAIJJtAeDyLG0B");
-    with_tvm_code(
-        "restricted-wallet3-r1",
-        "te6ccgECEgEAAUsAART/APSkE/S88sgLAQIBIAIDAgFIBAUD+PKDCNcYINMf0x/THwL4I7vyY+1E0NMf0x/T/"
-        "1NDuvKhUWK68qIG+QFUEHb5EPKkAY4fMwHT/9EB0x/0BNH4AAOkyMsfFMsfy/8Syx/0AMntVOEC0x/"
-        "0BNH4ACH4I9s8IYAg9HtvpTGW+gAwcvsCkTDiApMg10qK6NECpMgPEBEABNAwAgEgBgcCASAICQIBSAwNAgFuCgsAEbjJftRNDXCx+"
-        "AAXrc52omhpn5jrhf/AABesePaiaGmPmOuFj8ABDbbYHwR7Z5AOAQm1B1tnkA4BTu1E0IEBQNch0x/"
-        "0BNEC2zz4J28QAoAg9HtvpTGX+gAwoXC2CZEw4g8AOiGOETGA8/gzIG6SMHCU0NcLH+IB3yGSAaGSW3/iAAzTB9QC+wAAHssfFMsfEsv/yx/"
-        "0AMntVA==");
     with_tvm_code(
         "wallet-v4-r2",
         "te6cckECFAEAAtQAART/APSkE/S88sgLAQIBIAIDAgFIBAUE+PKDCNcYINMf0x/THwL4I7vyZO1E0NMf0x/T//"
@@ -111,10 +102,6 @@ td::Span<int> SmartContractCode::get_revisions(Type type) {
     }
     case Type::PaymentChannel: {
       static int res[] = {-1};
-      return res;
-    }
-    case Type::RestrictedWallet: {
-      static int res[] = {1};
       return res;
     }
     case Type::WalletV4: {
@@ -161,8 +148,6 @@ td::Ref<vm::Cell> SmartContractCode::get_code(Type type, int ext_revision) {
         return "dns-manual";
       case Type::PaymentChannel:
         return "payment-channel";
-      case Type::RestrictedWallet:
-        return "restricted-wallet3";
       case Type::WalletV4:
         return "wallet-v4";
     }

@@ -318,12 +318,6 @@ class TonlibCli : public td::actor::Actor {
     td::TerminalIO::out() << "\t            | timeout <key_id>\n";
   }
 
-  void rwallet_help() {
-    td::TerminalIO::out() << "rwallet help\n";
-    td::TerminalIO::out() << "rwallet address <key_id> <public_key>\n";
-    td::TerminalIO::out() << "rwallet init <key_id> <public_key> <start_at> [<seconds>:<value> ...]\n";
-  }
-
   void parse_line(td::BufferSlice line) {
     if (is_closing_) {
       return;
@@ -383,7 +377,6 @@ class TonlibCli : public td::actor::Actor {
 
       dns_help();
       pchan_help();
-      rwallet_help();
 
       td::TerminalIO::out()
           << "blockmode auto|manual\tWith auto mode, all queries will be executed with respect to the latest block. "
@@ -493,16 +486,13 @@ class TonlibCli : public td::actor::Actor {
       run_dns_cmd(parser, std::move(cmd_promise));
     } else if (cmd == "pchan") {
       run_pchan_cmd(parser, std::move(cmd_promise));
-    } else if (cmd == "rwallet") {
-      run_rwallet_cmd(parser, std::move(cmd_promise));
     } else if (cmd == "gethistory") {
       get_history(parser.read_word(), std::move(cmd_promise));
     } else if (cmd == "guessrevision") {
       guess_revision(parser.read_word(), std::move(cmd_promise));
     } else if (cmd == "guessaccount") {
       auto key = parser.read_word();
-      auto init_key = parser.read_word();
-      guess_account(key, init_key, std::move(cmd_promise));
+      guess_account(key, std::move(cmd_promise));
     } else if (cmd == "getmasterchainsignatures") {
       auto seqno = parser.read_word();
       run_get_masterchain_block_signatures(seqno, std::move(cmd_promise));
@@ -516,69 +506,6 @@ class TonlibCli : public td::actor::Actor {
     if (cmd_promise) {
       cmd_promise.set_value(td::Unit());
     }
-  }
-
-  void rwallet_address(td::ConstParser& parser, td::Promise<td::Unit> promise) {
-    TRY_RESULT_PROMISE(promise, address, to_account_address(parser.read_word(), false));
-    auto public_key = parser.read_word().str();
-    TRY_RESULT_PROMISE(
-        promise, addr,
-        sync_send_query(make_object<tonlib_api::getAccountAddress>(
-            make_object<tonlib_api::rwallet_initialAccountState>(address.public_key, public_key, wallet_id_ - 1), 1,
-            -1)));
-    td::TerminalIO::out() << addr->account_address_ << "\n";
-    promise.set_value(td::Unit());
-  }
-
-  void rwallet_init(td::ConstParser& parser, td::Promise<td::Unit> promise) {
-    TRY_RESULT_PROMISE(promise, address, to_account_address(parser.read_word(), false));
-    auto public_key = parser.read_word().str();
-    auto initial_state =
-        make_object<tonlib_api::rwallet_initialAccountState>(address.public_key, public_key, wallet_id_ - 1);
-    TRY_RESULT_PROMISE(
-        promise, addr,
-        sync_send_query(make_object<tonlib_api::getAccountAddress>(
-            make_object<tonlib_api::rwallet_initialAccountState>(address.public_key, public_key, wallet_id_ - 1), 1,
-            -1)));
-
-    TRY_RESULT_PROMISE(promise, start_at, td::to_integer_safe<td::int32>(parser.read_word()));
-    std::vector<std::pair<td::int32, td::uint64>> limits;
-    while (true) {
-      auto word = parser.read_word();
-      if (word.empty()) {
-        break;
-      }
-      auto column_at = word.find(':');
-      TRY_RESULT_PROMISE(promise, value, parse_grams(word.substr(column_at + 1)));
-      TRY_RESULT_PROMISE(promise, seconds, td::to_integer_safe<td::int32>(word.substr(0, column_at)));
-      limits.emplace_back(seconds, value.nano);
-    }
-    auto config = make_object<tonlib_api::rwallet_config>();
-    config->start_at_ = start_at;
-    for (auto limit : limits) {
-      config->limits_.push_back(make_object<tonlib_api::rwallet_limit>(limit.first, limit.second));
-    }
-    auto action =
-        make_object<tonlib_api::actionRwallet>(make_object<tonlib_api::rwallet_actionInit>(std::move(config)));
-    send_query(make_object<tonlib_api::createQuery>(address.input_key(), std::move(addr), 60, std::move(action),
-                                                    std::move(initial_state)),
-               promise.send_closure(actor_id(this), &TonlibCli::transfer2, false));
-  }
-
-  void run_rwallet_cmd(td::ConstParser& parser, td::Promise<td::Unit> promise) {
-    auto cmd = parser.read_word();
-    if (cmd == "help") {
-      rwallet_help();
-      return promise.set_value(td::Unit());
-    }
-    if (cmd == "address") {
-      return rwallet_address(parser, std::move(promise));
-    }
-    if (cmd == "init") {
-      return rwallet_init(parser, std::move(promise));
-    }
-
-    promise.set_error(td::Status::Error("Unknown command"));
   }
 
   void run_pchan_cmd(td::ConstParser& parser, td::Promise<td::Unit> promise) {
@@ -1923,13 +1850,12 @@ class TonlibCli : public td::actor::Actor {
     });
   }
 
-  void guess_account(td::Slice key, td::Slice init_public_key, td::Promise<td::Unit> promise) {
+  void guess_account(td::Slice key, td::Promise<td::Unit> promise) {
     TRY_RESULT_PROMISE(promise, address, to_account_address(key, false));
-    send_query(make_object<tonlib_api::guessAccount>(address.public_key, init_public_key.str()),
-               promise.wrap([](auto revisions) {
-                 td::TerminalIO::out() << to_string(revisions);
-                 return td::Unit();
-               }));
+    send_query(make_object<tonlib_api::guessAccount>(address.public_key), promise.wrap([](auto revisions) {
+      td::TerminalIO::out() << to_string(revisions);
+      return td::Unit();
+    }));
   }
 
   void run_get_masterchain_block_signatures(td::Slice seqno_s, td::Promise<td::Unit> promise) {

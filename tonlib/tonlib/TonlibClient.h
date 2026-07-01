@@ -77,7 +77,6 @@ class TonlibClient : public td::actor::Actor {
     LastBlockState last_state;
     std::string last_state_key;
     td::uint32 wallet_id;
-    std::string rwallet_init_public_key;
   };
 
   template <class T, class P>
@@ -105,7 +104,6 @@ class TonlibClient : public td::actor::Actor {
   Config config_;
   td::uint32 config_generation_{0};
   td::uint32 wallet_id_;
-  std::string rwallet_init_public_key_;
   std::string last_state_key_;
   bool use_callbacks_for_network_{false};
 

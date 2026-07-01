@@ -29,7 +29,6 @@ class SmartContractCode {
     WalletV3 = 4,
     ManualDns = 7,
     PaymentChannel = 9,
-    RestrictedWallet = 10,
     WalletV4 = 11
   };
   static td::Span<int> get_revisions(Type type);

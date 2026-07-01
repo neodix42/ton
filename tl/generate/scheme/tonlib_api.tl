@@ -26,7 +26,7 @@ keyStoreTypeInMemory = KeyStoreType;
 config config:string blockchain_name:string use_callbacks_for_network:Bool ignore_cache:Bool = Config;
 
 options config:config keystore_type:KeyStoreType = Options;
-options.configInfo default_wallet_id:int64 default_rwallet_init_public_key:string = options.ConfigInfo;
+options.configInfo default_wallet_id:int64 = options.ConfigInfo;
 options.info config_info:options.configInfo = options.Info;
 
 key public_key:string secret:secureBytes = Key;
@@ -65,10 +65,6 @@ raw.initialAccountState code:bytes data:bytes = InitialAccountState;
 wallet.v3.initialAccountState public_key:string wallet_id:int64 = InitialAccountState;
 wallet.v4.initialAccountState public_key:string wallet_id:int64 = InitialAccountState;
 
-rwallet.limit seconds:int32 value:int64 = rwallet.Limit;
-rwallet.config start_at:int53 limits:vector<rwallet.limit> = rwallet.Config;
-rwallet.initialAccountState init_public_key:string public_key:string wallet_id:int64 = InitialAccountState;
-
 dns.initialAccountState public_key:string wallet_id:int64 = InitialAccountState;
 pchan.initialAccountState config:pchan.config = InitialAccountState;
 
@@ -76,7 +72,6 @@ raw.accountState code:bytes data:bytes frozen_hash:bytes = AccountState;
 wallet.v3.accountState wallet_id:int64 seqno:int32 = AccountState;
 wallet.v4.accountState wallet_id:int64 seqno:int32 = AccountState;
 dns.accountState wallet_id:int64 = AccountState;
-rwallet.accountState wallet_id:int64 seqno:int32 unlocked_balance:int64 config:rwallet.config = AccountState;
 
 pchan.stateInit signed_A:Bool signed_B:Bool min_A:int64 min_B:int64 expire_at:int53 A:int64 B:int64 = pchan.State;
 pchan.stateClose signed_A:Bool signed_B:Bool min_A:int64 min_B:int64 expire_at:int53 A:int64 B:int64 = pchan.State;
@@ -141,11 +136,6 @@ pchan.actionClose extra_A:int64 extra_B:int64 promise:pchan.promise = pchan.Acti
 pchan.actionTimeout = pchan.Action;
 
 //
-// Restricted wallet initialization
-//
-rwallet.actionInit config:rwallet.config = rwallet.Action;
-
-//
 // Actions
 //
 
@@ -153,7 +143,6 @@ actionNoop  = Action;
 actionMsg messages:vector<msg.message> allow_send_to_uninited:Bool = Action;
 actionDns actions:vector<dns.Action> = Action;
 actionPchan action:pchan.Action = Action;
-actionRwallet action:rwallet.actionInit = Action;
 
 fees in_fwd_fee:int53 storage_fee:int53 gas_fee:int53 fwd_fee:int53 = Fees;
 query.fees source_fees:fees destination_fees:vector<fees> = query.Fees;
@@ -287,7 +276,7 @@ sync = ton.BlockIdExt;
 getAccountAddress initial_account_state:InitialAccountState revision:int32 workchain_id:int32 = AccountAddress;
 guessAccountRevision initial_account_state:InitialAccountState workchain_id:int32 = AccountRevisionList;
 
-guessAccount public_key:string rwallet_init_public_key:string = AccountRevisionList;
+guessAccount public_key:string = AccountRevisionList;
 
 getAccountState account_address:accountAddress = FullAccountState;
 getAccountStateByTransaction account_address:accountAddress transaction_id:internal.transactionId = FullAccountState;

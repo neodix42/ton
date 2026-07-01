@@ -1,4 +1,4 @@
-;; Restricted wallet initialized by a third party (a variant of restricted-wallet3-code.fc)
+;; Lockup wallet initialized by a third party
 ;; Allows to add more locked budget after initialization
 
 #include "stdlib.fc";
@@ -12,7 +12,7 @@ int err:replay_protection() asm "36 PUSHINT";
 int err:unknown_op() asm "40 PUSHINT";
 int err:unknown_cmd() asm "41 PUSHINT";
 
-int op:rwallet_op() asm "0x82eaf9c4 PUSHINT";
+int op:lockup_op() asm "0x82eaf9c4 PUSHINT";
 int cmd:restricted_transfer() asm "0x373aa9f4 PUSHINT";
 
 _ is_whitelisted?(addr, allowed_destinations) {
@@ -111,11 +111,11 @@ locked, int total_restricted_value, cell restricted) {
   var (stored_seqno, stored_subwallet, public_key, config_public_key, allowed_destinations, total_locked_value, locked,
        total_restricted_value, restricted) = unpack_data();
 
-  if is_whitelisted?(s_addr, allowed_destinations) & (op != op:rwallet_op()) {
+  if is_whitelisted?(s_addr, allowed_destinations) & (op != op:lockup_op()) {
     return ();
   }
 
-  throw_unless(err:unknown_op(), op == op:rwallet_op());
+  throw_unless(err:unknown_op(), op == op:lockup_op());
   throw_unless(err:value_is_too_small(), msg_value >= 1000000000);
 
 
