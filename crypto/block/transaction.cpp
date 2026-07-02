@@ -1322,16 +1322,15 @@ namespace transaction {
 /**
  * Checks if it is required to increase gas_limit (from GasLimitsPrices config) for the transaction
  *
- * In January 2024 a highload wallet of @wallet Telegram bot in mainnet was stuck because current gas limit (1M) is
+ * In January 2024 a wallet account of @wallet Telegram bot in mainnet was stuck because current gas limit (1M) was
  * not enough to clean up old queries, thus locking funds inside.
- * See comment in crypto/smartcont/highload-wallet-v2-code.fc for details on why this happened.
  * Account address: EQD_v9j1rlsuHHw2FIhcsCFFSD367ldfDdCKcsNmNpIRzUlu
  * It was proposed to validators to increase gas limit for this account to 70M for a limited amount
  * of time (until 2024-02-29).
  * It is activated by setting global version to 5 in ConfigParam 8.
  * This config change also activates new behavior for special accounts in masterchain.
  *
- * In August 2024 it was decided to unlock other old highload wallets that got into the same situation.
+ * In August 2024 it was decided to unlock other old wallet accounts that got into the same situation.
  * See https://t.me/tondev_news/129
  * It is activated by setting global version to 9.
  *

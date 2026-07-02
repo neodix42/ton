@@ -38,10 +38,7 @@ config.workchains!
 
 // Stage 1 wallets
 
-PK'Puasxr0QfFZZnYISRphVse7XHKfW7pZU5SJarVHXvQ+rpzkD rwallet-init-pubkey !
--86400 rwallet-start-at +!
-
-{ swap create-wallet3 } : stage1
+{ swap create-wallet0 } : stage1
 { bl word $>GR bl word parse-pubkey } : parse-amount-pubkey
 { parse-amount-pubkey stage1 } : StA
 
@@ -56,9 +53,9 @@ StA 1001 PuZ8WoEOTgSR8-HopmCIVlOVSL94tNn9zgraiJqMk1SnioEQ
 // test
 StB 999. PubMMGvqM08jx_6BibYldMclwjl-D88r7-u0_IEcDXHA30-G
 
-// Lockdowns
+// Additional wallets
 
-{ swap create-wallet3b } : stage3
+{ swap create-wallet0 } : stage3
 { parse-amount-pubkey stage3 } : StC
 
 // SmartContract #1 (Advanced wallet)

@@ -27,13 +27,9 @@ class SmartContractCode {
 
   enum Type {
     WalletV3 = 4,
-    HighloadWalletV1,
-    HighloadWalletV2,
-    ManualDns,
-    Multisig,
-    PaymentChannel,
-    RestrictedWallet,
-    WalletV4
+    ManualDns = 7,
+    PaymentChannel = 9,
+    WalletV4 = 11
   };
   static td::Span<int> get_revisions(Type type);
   static td::Result<int> validate_revision(Type type, int revision);

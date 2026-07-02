@@ -226,10 +226,7 @@ set(BLOCK_SOURCE
 
 set(SMC_ENVELOPE_SOURCE
   smc-envelope/GenericAccount.cpp
-  smc-envelope/HighloadWallet.cpp
-  smc-envelope/HighloadWalletV2.cpp
   smc-envelope/ManualDns.cpp
-  smc-envelope/MultisigWallet.cpp
   smc-envelope/PaymentChannel.cpp
   smc-envelope/SmartContract.cpp
   smc-envelope/SmartContractCode.cpp
@@ -238,10 +235,7 @@ set(SMC_ENVELOPE_SOURCE
   smc-envelope/WalletV4.cpp
 
   smc-envelope/GenericAccount.h
-  smc-envelope/HighloadWallet.h
-  smc-envelope/HighloadWalletV2.h
   smc-envelope/ManualDns.h
-  smc-envelope/MultisigWallet.h
   smc-envelope/SmartContract.h
   smc-envelope/SmartContractCode.h
   smc-envelope/WalletInterface.h
@@ -512,9 +506,6 @@ if (NOT CMAKE_CROSSCOMPILING OR USE_EMSCRIPTEN)
   GenFif(DEST smartcont/auto/wallet3-code SOURCE smartcont/wallet3-code.fc NAME wallet3)
   GenFif(DEST smartcont/auto/simple-wallet-code SOURCE smartcont/simple-wallet-code.fc NAME simple-wallet)
   GenFif(DEST smartcont/auto/elector-code SOURCE smartcont/elector-code.fc NAME elector-code)
-  GenFif(DEST smartcont/auto/restricted-wallet-code SOURCE smartcont/restricted-wallet-code.fc NAME restricted-wallet)
-  GenFif(DEST smartcont/auto/restricted-wallet2-code SOURCE smartcont/restricted-wallet2-code.fc NAME restricted-wallet2)
-  GenFif(DEST smartcont/auto/restricted-wallet3-code SOURCE smartcont/restricted-wallet3-code.fc NAME restricted-wallet3)
   GenFif(DEST smartcont/auto/pow-testgiver-code SOURCE smartcont/pow-testgiver-code.fc NAME pow-testgiver)
 
   GenFif(DEST smartcont/auto/dns-manual-code SOURCE smartcont/dns-manual-code.fc NAME dns-manual)

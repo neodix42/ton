@@ -152,7 +152,7 @@ Besides the work of the core team, this update is based on the efforts of  @Sild
 4. TVM: Fix processing continuation control data on deep jump
 5. A few fixes of tl-b schemes: crc computation, incorrect tag for merkle proofs, advance_ext, NatWidth print
 6. Emulator improvements: fix setting libraries,  extracurrency support
-7. Increase of gas limit for unlocking highload-v2 wallets locked in the beginning of 2024
+7. Increase of gas limit for unlocking affected wallets locked in the beginning of 2024
 8. Validator console improvement: dashed names, better shard formats
 
 
@@ -394,5 +394,4 @@ Besides the work of the core team, this update is based on the efforts of @aweso
 * Improved Liteserver DoS resistance for running getmethods.
 
 Besides the work of the core team, this update is based on the efforts of @tvorogme (added support for slice arguments and noted bugs in Asm.fif), @akifoq (fixed bug in Asm.fif), @cryshado (noted strange behavior of LS, which, upon inspection, turned out to be a vector of DoS attack).
-
 
