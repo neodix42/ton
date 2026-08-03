@@ -205,14 +205,6 @@ jobs:
           asset_name: lite-client.exe
           tag: ${{ inputs.tag }}
 
-      - name: Upload Windows 2019 single artifact - proxy-liteserver
-        uses: svenstaro/upload-release-action@29e53e917877a24fad85510ded594ab3c9ca12de # v2
-        with:
-          repo_token: ${{ secrets.GITHUB_TOKEN }}
-          file: artifacts/ton-x86-64-windows/proxy-liteserver.exe
-          asset_name: proxy-liteserver.exe
-          tag: ${{ inputs.tag }}
-
       - name: Upload Windows 2019 single artifact - http-proxy
         uses: svenstaro/upload-release-action@29e53e917877a24fad85510ded594ab3c9ca12de # v2
         with:
@@ -301,14 +293,6 @@ jobs:
           repo_token: ${{ secrets.GITHUB_TOKEN }}
           file: artifacts/ton-x86_64-macos/lite-client
           asset_name: lite-client-mac-x86-64
-          tag: ${{ inputs.tag }}
-
-      - name: Upload Mac x86-64 single artifact - proxy-liteserver
-        uses: svenstaro/upload-release-action@29e53e917877a24fad85510ded594ab3c9ca12de # v2
-        with:
-          repo_token: ${{ secrets.GITHUB_TOKEN }}
-          file: artifacts/ton-x86_64-macos/proxy-liteserver
-          asset_name: proxy-liteserver-mac-x86-64
           tag: ${{ inputs.tag }}
 
       - name: Upload Mac x86-64 single artifact - http-proxy
@@ -400,14 +384,6 @@ jobs:
           repo_token: ${{ secrets.GITHUB_TOKEN }}
           file: artifacts/ton-arm64-macos/lite-client
           asset_name: lite-client-mac-arm64
-          tag: ${{ inputs.tag }}
-
-      - name: Upload Mac arm64 single artifact - proxy-liteserver
-        uses: svenstaro/upload-release-action@29e53e917877a24fad85510ded594ab3c9ca12de # v2
-        with:
-          repo_token: ${{ secrets.GITHUB_TOKEN }}
-          file: artifacts/ton-arm64-macos/proxy-liteserver
-          asset_name: proxy-liteserver-mac-arm64
           tag: ${{ inputs.tag }}
 
       - name: Upload Mac arm64 single artifact - http-proxy
@@ -508,14 +484,6 @@ jobs:
           asset_name: lite-client-linux-x86_64
           tag: ${{ inputs.tag }}
 
-      - name: Upload Linux x86-64 single artifact - proxy-liteserver
-        uses: svenstaro/upload-release-action@29e53e917877a24fad85510ded594ab3c9ca12de # v2
-        with:
-          repo_token: ${{ secrets.GITHUB_TOKEN }}
-          file: artifacts/ton-x86_64-linux/proxy-liteserver
-          asset_name: proxy-liteserver-linux-x86_64
-          tag: ${{ inputs.tag }}
-
       - name: Upload Linux x86-64 single artifact - http-proxy
         uses: svenstaro/upload-release-action@29e53e917877a24fad85510ded594ab3c9ca12de # v2
         with:
@@ -605,14 +573,6 @@ jobs:
           repo_token: ${{ secrets.GITHUB_TOKEN }}
           file: artifacts/ton-arm64-linux/lite-client
           asset_name: lite-client-linux-arm64
-          tag: ${{ inputs.tag }}
-
-      - name: Upload Linux arm64 single artifact - proxy-liteserver
-        uses: svenstaro/upload-release-action@29e53e917877a24fad85510ded594ab3c9ca12de # v2
-        with:
-          repo_token: ${{ secrets.GITHUB_TOKEN }}
-          file: artifacts/ton-arm64-linux/proxy-liteserver
-          asset_name: proxy-liteserver-linux-arm64
           tag: ${{ inputs.tag }}
 
       - name: Upload Linux arm64 single artifact - http-proxy
