@@ -1,15 +1,16 @@
 # Generation of Tonlib libraries for Android OS
-**Tl;dr** Download the latest version of Tonlib libraries for Android from TON release page or check the artifacts from [Android JNI GitHub action](https://github.com/ton-blockchain/ton/actions/workflows/tonlib-android-jni.yml).
 
 ## Compile Tonlib for Android manually
-Prerequisite: installed Java and set environment variable JAVA_HOME.
+Prerequisites: installed Java with `JAVA_HOME` set, Android NDK with `ANDROID_NDK_ROOT` set, CMake, and Ninja.
 ```bash
 git clone --recursive https://github.com/ton-blockchain/ton.git
-cd ton
-cp assembly/android/build-android-tonlib.sh .
-chmod +x build-android-tonlib.sh
-sudo -E ./build-android-tonlib.sh
+cd ton/example/android
+cmake -S . -B build_native -GNinja -DTON_ONLY_TONLIB=ON
+cmake --build build_native --target prepare_cross_compiling
+./build-all.sh
 ```
+Built JNI libraries are written to `example/android/libs/`.
+
 # Generation of Tonlib libraries for iOS in Xcode
 
 1. Clone repository https://github.com/labraburn/tonlib-xcframework
