@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: LGPL-2.0-or-later
  */
 
+#include "td/actor/SharedFuture.h"
 #include "td/actor/coro_task.h"
 #include "td/utils/CancellationToken.h"
 #include "validator/collator-scoreboard.hpp"
@@ -34,16 +35,7 @@ class BlockProducerImpl : public td::actor::SpawnsWith<Bus>, public td::actor::C
     no_empty_blocks_on_error_timeout_ = bus.config.noncritical_params.no_empty_blocks_on_error_timeout;
 
     if (!bus.shard.is_masterchain()) {
-      auto list = bus.validator_opts.load()->get_collators_list();
-      allow_self_collate_ = !list->disable_self_collate;
-      LOG(INFO) << "Allow self collate = " << allow_self_collate_;
-      if (auto it = bus.collators_by_validator.find(bus.local_id->short_id); it != bus.collators_by_validator.end()) {
-        for (const adnl::AdnlNodeIdShort& collator_id : it->second) {
-          collator_nodes_.push_back(collator_id);
-          LOG(INFO) << "Configured collator node " << collator_id;
-        }
-      }
-
+      update_collators_list();
       auto delegated_windows = bus.db->get_by_prefix(tl::db_key_delegatedWindow::ID);
       for (auto& [key_str, value_str] : delegated_windows) {
         auto key = fetch_tl_object<tl::db_key_delegatedWindow>(key_str, true).move_as_ok();
@@ -58,6 +50,11 @@ class BlockProducerImpl : public td::actor::SpawnsWith<Bus>, public td::actor::C
   void handle(BusHandle, std::shared_ptr<const NoncriticalParamsUpdated> event) {
     target_rate_ = event->params.target_rate;
     no_empty_blocks_on_error_timeout_ = event->params.no_empty_blocks_on_error_timeout;
+  }
+
+  template <>
+  void handle(BusHandle, std::shared_ptr<const ValidatorOptionsUpdated>) {
+    update_collators_list();
   }
 
   template <>
@@ -83,6 +80,7 @@ class BlockProducerImpl : public td::actor::SpawnsWith<Bus>, public td::actor::C
   void handle(BusHandle, std::shared_ptr<const OurLeaderWindowStarted> event) {
     CHECK(current_leader_window_ < event->start_slot);
 
+    last_our_leader_window_ = event->start_slot;
     current_leader_window_ = event->start_slot;
     if (delegated_windows_.contains(event->start_slot)) {
       LOG(INFO) << "Window " << event->start_slot << " is delegated to "
@@ -128,26 +126,27 @@ class BlockProducerImpl : public td::actor::SpawnsWith<Bus>, public td::actor::C
       LOG(INFO) << "Window " << start_slot << " already delegated to " << it->second.collator;
       co_return {};
     }
-    if (collator_nodes_.empty()) {
-      co_return {};
-    }
 
     adnl::AdnlNodeIdShort selected_collator;
     while (true) {
-      std::vector<td::actor::StartedTask<ProtocolMessage>> prepare_requests;
+      if (collator_nodes_.empty()) {
+        co_return {};
+      }
+      if (last_our_leader_window_.has_value() && *last_our_leader_window_ >= start_slot) {
+        LOG(INFO) << "Not delegating window " << start_slot << ": window already started";
+        co_return {};
+      }
+      auto collator_nodes = collator_nodes_;
+      std::vector<td::actor::StartedTask<>> prepare_requests;
       td::Timestamp timeout = td::Timestamp::in(COLLATE_REQUEST_TIMEOUT);
-      for (const adnl::AdnlNodeIdShort& collator_id : collator_nodes_) {
-        prepare_requests.push_back(
-            owning_bus()
-                .publish(std::make_shared<OutgoingOverlayRequest>(
-                    collator_id, timeout, create_serialize_tl_object<tl::pleaseCollatePrepare>(start_slot), 1024))
-                .start());
+      for (const adnl::AdnlNodeIdShort& collator_id : collator_nodes) {
+        prepare_requests.push_back(send_please_collate_prepare(collator_id, start_slot, timeout).start());
       }
       auto prepare_responses = co_await td::actor::all_wrap(std::move(prepare_requests));
       std::vector<adnl::AdnlNodeIdShort> alive_collator_nodes;
-      for (size_t i = 0; i < collator_nodes_.size(); ++i) {
+      for (size_t i = 0; i < collator_nodes.size(); ++i) {
         if (prepare_responses[i].is_ok()) {
-          alive_collator_nodes.push_back(collator_nodes_[i]);
+          alive_collator_nodes.push_back(collator_nodes[i]);
         }
       }
       if (alive_collator_nodes.empty()) {
@@ -163,7 +162,7 @@ class BlockProducerImpl : public td::actor::SpawnsWith<Bus>, public td::actor::C
         co_await td::actor::coro_sleep(timeout);
         continue;
       }
-      if (current_leader_window_.has_value() && *current_leader_window_ >= start_slot) {
+      if (last_our_leader_window_.has_value() && *last_our_leader_window_ >= start_slot) {
         LOG(INFO) << "Not delegating window " << start_slot << ": window already started";
         co_return {};
       }
@@ -178,7 +177,7 @@ class BlockProducerImpl : public td::actor::SpawnsWith<Bus>, public td::actor::C
     auto signature = co_await td::actor::ask(bus.keyring, &keyring::Keyring::sign_message, bus.local_id->short_id,
                                              std::move(to_sign));
 
-    if (current_leader_window_.has_value() && *current_leader_window_ >= start_slot) {
+    if (last_our_leader_window_.has_value() && *last_our_leader_window_ >= start_slot) {
       LOG(INFO) << "Not delegating window " << start_slot << ": window already started";
       co_return {};
     }
@@ -195,6 +194,16 @@ class BlockProducerImpl : public td::actor::SpawnsWith<Bus>, public td::actor::C
       LOG(WARNING) << "Delegating window " << start_slot << " to " << selected_collator << " : "
                    << response.move_as_error();
     }
+    co_return {};
+  }
+
+  td::actor::Task<> send_please_collate_prepare(adnl::AdnlNodeIdShort collator_id, td::uint32 start_slot,
+                                                td::Timestamp timeout) {
+    auto task = owning_bus()
+                    .publish(std::make_shared<OutgoingOverlayRequest>(
+                        collator_id, timeout, create_serialize_tl_object<tl::pleaseCollatePrepare>(start_slot), 1024))
+                    .start();
+    co_await td::actor::await_with_timeout(std::move(task), timeout);
     co_return {};
   }
 
@@ -251,6 +260,30 @@ class BlockProducerImpl : public td::actor::SpawnsWith<Bus>, public td::actor::C
     co_return {};
   }
 
+  void update_collators_list() {
+    auto& bus = *owning_bus();
+    if (bus.shard.is_masterchain()) {
+      return;
+    }
+    auto list = bus.validator_opts.load()->get_collators_list();
+    if (list == collators_list_) {
+      return;
+    }
+    collators_list_ = list;
+    allow_self_collate_ = !list->disable_self_collate;
+    LOG(INFO) << "Allow self collate = " << allow_self_collate_;
+    collator_nodes_.clear();
+    for (const adnl::AdnlNodeIdShort& collator_id : list->collators) {
+      if (std::find(bus.all_overlay_nodes.begin(), bus.all_overlay_nodes.end(), collator_id) !=
+          bus.all_overlay_nodes.end()) {
+        collator_nodes_.push_back(collator_id);
+        LOG(INFO) << "Configured collator node " << collator_id << " : OK";
+      } else {
+        LOG(INFO) << "Configured collator node " << collator_id << " : node not in overlay";
+      }
+    }
+  }
+
   struct DelegatedWindow {
     adnl::AdnlNodeIdShort collator;
     bool produced = false;
@@ -258,11 +291,13 @@ class BlockProducerImpl : public td::actor::SpawnsWith<Bus>, public td::actor::C
   };
 
   std::optional<td::uint32> current_leader_window_;
+  std::optional<td::uint32> last_our_leader_window_;
   td::CancellationTokenSource cancellation_source_;
 
   std::vector<adnl::AdnlNodeIdShort> collator_nodes_;
   bool allow_self_collate_ = true;
   std::map<td::uint32, DelegatedWindow> delegated_windows_;
+  Ref<CollatorsList> collators_list_;
 
   EmptyBlockPolicy empty_block_policy_;
   std::chrono::milliseconds target_rate_;
