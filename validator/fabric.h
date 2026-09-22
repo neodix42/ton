@@ -37,6 +37,8 @@ struct CollateParams {
   td::Ref<block::ValidatorSet> validator_set = {};
   td::Ref<CollatorOptions> collator_opts = {};
   adnl::AdnlNodeIdShort collator_node_id = adnl::AdnlNodeIdShort::zero();
+  // First slot of the producer's leader window: no head start over the previous producer's handoff.
+  bool first_in_window = false;
   int attempt_idx = 0;
   td::optional<double> utime = {};
   td::Timestamp hard_timeout = td::Timestamp::in(10.0);
@@ -47,6 +49,10 @@ struct CollateParams {
   // If not empty, should be the same size as prev
   std::vector<Ref<BlockData>> prev_block_data = {};
   std::vector<Ref<vm::Cell>> prev_block_state_roots = {};
+
+  // Optional deterministic block seed for replay/benchmark tooling. Normal
+  // production callers leave it empty and retain the collator's random seed.
+  td::optional<td::Bits256> rand_seed = {};
 };
 
 struct ValidateParams {
