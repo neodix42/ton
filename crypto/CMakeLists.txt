@@ -251,6 +251,7 @@ set(ED25519_TEST_SOURCE
 )
 
 set(TONDB_TEST_SOURCE
+  ${CMAKE_CURRENT_SOURCE_DIR}/test/test-boc-compression.cpp
   ${CMAKE_CURRENT_SOURCE_DIR}/test/test-db.cpp
   PARENT_SCOPE
 )
@@ -331,6 +332,10 @@ target_include_directories(ton_crypto PRIVATE ${BLST_INCLUDE_DIR})
 target_link_libraries(ton_crypto PRIVATE ${BLST_LIB})
 
 target_include_directories(ton_crypto_core PUBLIC $<BUILD_INTERFACE:${SECP256K1_INCLUDE_DIR}>)
+
+if (WIN32)
+  target_compile_definitions(ton_crypto_core PUBLIC SECP256K1_STATIC)
+endif()
 
 if (MSVC)
   find_package(Sodium REQUIRED)
